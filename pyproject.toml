@@ -1,0 +1,12 @@
+[tool.uv.workspace]
+members = ["cell-tracker", "cell-viewer", "cell-filter"]
+
+[tool.uv.sources]
+cell-tracker = { workspace = true }
+cell-viewer = { workspace = true }
+cell-filter = { workspace = true }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]
