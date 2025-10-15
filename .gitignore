@@ -207,3 +207,6 @@ test_output_*
 
 # Log files
 *.log
+
+data/
+output/
