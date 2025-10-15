@@ -81,7 +81,7 @@ def main():
         if not Path(yaml_path).exists():
             yaml_path = None
     
-    print(f"Cell Grapher CLI")
+    print("Cell Grapher CLI")
     print(f"Input NPY: {args.input}")
     if yaml_path:
         print(f"Input YAML: {yaml_path}")
@@ -117,15 +117,15 @@ def main():
         )
         
         # Print summary
-        print(f"\n" + "="*50)
-        print(f"ANALYSIS COMPLETE")
-        print(f"="*50)
+        print("\n" + "="*50)
+        print("ANALYSIS COMPLETE")
+        print("="*50)
         print(f"Total frames processed: {results['total_frames']}")
         print(f"Frame range: {results['frame_range'][0]} - {results['frame_range'][1]}")
         print(f"T1 edge weight range: {results['t1_weight_range'][0]:.2f} - {results['t1_weight_range'][1]:.2f}")
         print(f"T1 events detected: {results['t1_events_detected']}")
         print()
-        print(f"Output files:")
+        print("Output files:")
         for file_type, path in results['output_files'].items():
             print(f"  {file_type}: {path}")
         

@@ -19,6 +19,7 @@ dependencies = [
     "networkx",
     "scipy",
     "pyyaml",
+    "opencv-python",
 ]
 
 [project.scripts]

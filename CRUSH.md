@@ -10,7 +10,7 @@ This is a multi-package repository with three Python packages. Run commands from
 - **Run single test**: `python -m pytest tests/test_specific.py::test_function -v`
 - **Run cell-filter counter test**: `python -m cell_filter.tests.test_counter`
 - **Run cell-grapher test**: `python cell_grapher/test.py`
-- **Lint**: No explicit lint command configured
+- **Lint**: `ruff check --fix .`
 - **Type check**: No explicit typecheck command configured
 
 ### Module Entry Points
@@ -59,7 +59,7 @@ from cell_filter.core import Cropper, CropperParameters
 ### Dependencies
 - **cell-viewer**: PySide6, numpy, matplotlib, pyyaml
 - **cell-filter**: numpy, torch, opencv-python, cellpose>4, nd2, scikit-image
-- **cell-grapher**: numpy, matplotlib, scikit-image, networkx, scipy, pyyaml
+- **cell-grapher**: numpy, matplotlib, scikit-image, networkx, scipy, pyyaml, opencv-python
 
 ### Testing
 - Tests located in `tests/` directories or individual test files
@@ -79,7 +79,7 @@ Cell-grapher has been updated to use pre-computed segmentation masks from cell-f
 
 ### CLI Usage Example
 ```bash
-# Basic usage
+# Basic usage (output directory is now required)
 cell-grapher --input fov_000_pattern_000_seq_000.npy --output ./tracking_output
 
 # With custom parameters
@@ -92,15 +92,18 @@ cell-grapher \
   --iou-threshold 0.25 \
   --adjacency-method centroid_distance
 
+# Auto-detect start frame (from first frame)
+cell-grapher --input fov_000_pattern_000_seq_000.npy --output ./tracking_output
+
 # Validate input format only
 cell-grapher --input fov_000_pattern_000_seq_000.npy --validate-only
 ```
 
 ### CLI Arguments
 - `--input, -i`: Path to cell-filter NPY file (required)
-- `--output, -o`: Output directory (default: tracking_output)
+- `--output, -o`: Output directory (required)
 - `--yaml, -y`: Path to YAML metadata file (optional, auto-detected)
-- `--start-frame, -s`: Starting frame number (default: 0)
+- `--start-frame, -s`: Starting frame number (optional, auto-detects first frame)
 - `--end-frame, -e`: Ending frame number (exclusive, optional)
 - `--iou-threshold`: IoU threshold for tracking (default: 0.3)
 - `--adjacency-method`: Graph building method (default: boundary_length)
@@ -114,7 +117,8 @@ results = analyze_cell_filter_data(
     npy_path="fov_000_pattern_000_seq_000.npy",
     yaml_path="fov_000_pattern_000_seq_000.yaml",  # optional
     output_dir="tracking_analysis",
-    start_frame=0
+    start_frame=None,  # optional, auto-detects first frame
+    end_frame=None    # optional, processes all frames
 )
 ```
 
@@ -126,8 +130,16 @@ results = analyze_cell_filter_data(
 ### Output
 - Tracked cell masks with global IDs
 - T1 transition analysis plots and CSV data
-- Frame-by-frame visualizations
+- Video file with 3-panel visualization (nuclei, cytoplasm, segmentation+graph)
 - Topology tracking over time
+
+### Video Creation
+Cell-grapher automatically creates a video file (`cell_analysis_video.mp4`) with three synchronized panels:
+- **Panel 1**: Nuclei fluorescence channel (grayscale)
+- **Panel 2**: Cytoplasm fluorescence channel (grayscale)  
+- **Panel 3**: Segmentation mask with overlaid adjacency graph showing cell relationships
+
+The video is created directly from matplotlib figures without intermediate PNG files, providing efficient processing and clean output.
 
 ## Cell-Filter Output Formats
 
