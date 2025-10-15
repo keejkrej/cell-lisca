@@ -1,6 +1,6 @@
 import numpy as np
 import yaml
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from pathlib import Path
 
 

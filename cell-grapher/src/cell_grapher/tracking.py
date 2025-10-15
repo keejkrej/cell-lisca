@@ -3,7 +3,7 @@ Cell tracking functionality using IoU overlap between frames.
 """
 
 import numpy as np
-from typing import Dict, Tuple, Optional
+from typing import Dict
 
 
 def calculate_iou(mask1: np.ndarray, mask2: np.ndarray) -> float:

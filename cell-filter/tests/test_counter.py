@@ -32,7 +32,7 @@ import sys
 
 import matplotlib.pyplot as plt
 
-from cell_filter.utils.nikon import load_nd2, get_nd2_channel_stack, get_nd2_frame
+from cell_filter.utils.nikon import load_nd2, get_nd2_channel_stack
 from cell_filter.pattern import Patterner
 from cell_filter.core.count import CellposeCounter
 

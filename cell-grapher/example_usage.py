@@ -36,7 +36,7 @@ def main():
     )
     
     # Print summary
-    print(f"\nAnalysis Summary:")
+    print("\nAnalysis Summary:")
     print(f"Total frames processed: {results['total_frames']}")
     print(f"Frame range: {results['frame_range']}")
     print(f"T1 edge weight range: {results['t1_weight_range']}")
