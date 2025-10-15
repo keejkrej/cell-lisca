@@ -28,5 +28,10 @@ dependencies = [
     "pyyaml",
 ]
 
+[project.scripts]
+cell-filter-pattern = "cell_filter.pattern.main:main"
+cell-filter-filter = "cell_filter.filter.main:main"
+cell-filter-extract = "cell_filter.extract.main:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/cell_filter"]

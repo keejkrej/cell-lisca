@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cell-tracker"
+name = "cell-grapher"
 version = "0.1.0"
-description = "A tool for segmenting four-cell clusters and tracking T1 transitions in microscopy images"
+description = "A tool for creating region adjacency graphs and analyzing T1 transitions in microscopy images"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -15,12 +15,14 @@ authors = [
 dependencies = [
     "numpy",
     "matplotlib",
-    "tifffile",
     "scikit-image",
-    "cellpose>=4",
     "networkx",
     "scipy",
+    "pyyaml",
 ]
 
+[project.scripts]
+cell-grapher = "cell_grapher.main:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["src/cell_tracker"]
+packages = ["src/cell_grapher"]

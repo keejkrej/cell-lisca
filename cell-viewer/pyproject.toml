@@ -19,5 +19,8 @@ dependencies = [
     "pyyaml>=6.0.2",
 ]
 
+[project.scripts]
+cell-viewer = "cell_viewer.main:main"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/cell_viewer"]
