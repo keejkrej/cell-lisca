@@ -279,11 +279,13 @@ class MainWindow(QMainWindow):
             # Attempt to read sidecar YAML metadata (same basename)
             self.channel_names = None
             self.segmentation_channel_index = None
+            self._original_metadata = None  # Store original metadata for trimmed files
             metadata_path = os.path.splitext(file_path)[0] + '.yaml'
             if os.path.exists(metadata_path):
                 try:
                     with open(metadata_path, 'r') as f:
                         meta = yaml.safe_load(f) or {}
+                    self._original_metadata = meta  # Store original metadata
                     ch = meta.get('channels')
                     if isinstance(ch, list) and all(isinstance(x, str) for x in ch):
                         self.channel_names = ch
@@ -632,9 +634,33 @@ class MainWindow(QMainWindow):
                 
                 # Save to new file
                 np.save(save_path, interval_stack)
+                
+                # Save corresponding YAML metadata
+                yaml_path = os.path.splitext(save_path)[0] + '.yaml'
+                self._save_trimmed_yaml(yaml_path, self.start_frame, self.end_frame)
+                
                 self.statusBar.showMessage(f"Saved interval to {save_path}")
         except Exception as e:
             self.statusBar.showMessage(f"Error saving interval: {str(e)}")
+    
+    def _save_trimmed_yaml(self, yaml_path: str, start_frame: int, end_frame: int):
+        """Save YAML metadata for trimmed NPY file with same structure as original"""
+        try:
+            metadata = {
+                "start_frame": start_frame,
+                "end_frame": end_frame,
+                "channels": self.channel_names if self.channel_names else []
+            }
+            
+            # Add pattern_bbox if available from original metadata
+            if hasattr(self, '_original_metadata') and self._original_metadata:
+                if 'pattern_bbox' in self._original_metadata:
+                    metadata['pattern_bbox'] = self._original_metadata['pattern_bbox']
+            
+            with open(yaml_path, 'w') as f:
+                yaml.safe_dump(metadata, f, sort_keys=False)
+        except Exception as e:
+            self.statusBar.showMessage(f"Warning: Failed to save YAML metadata: {str(e)}")
             
     def resizeEvent(self, event):
         """Handle window resize events"""

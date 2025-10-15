@@ -16,7 +16,6 @@ resolution-markers = [
 [manifest]
 members = [
     "cell-filter",
-    "cell-tracker",
     "cell-viewer",
 ]
 
@@ -67,29 +66,6 @@ requires-dist = [
     { name = "tifffile" },
     { name = "torch" },
     { name = "xarray" },
-]
-
-[[package]]
-name = "cell-tracker"
-version = "0.1.0"
-source = { editable = "cell-tracker" }
-dependencies = [
-    { name = "matplotlib" },
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "pyyaml" },
-    { name = "scikit-image" },
-    { name = "scipy" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "matplotlib" },
-    { name = "networkx" },
-    { name = "numpy" },
-    { name = "pyyaml" },
-    { name = "scikit-image" },
-    { name = "scipy" },
 ]
 
 [[package]]
