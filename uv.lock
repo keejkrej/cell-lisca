@@ -74,24 +74,22 @@ name = "cell-tracker"
 version = "0.1.0"
 source = { editable = "cell-tracker" }
 dependencies = [
-    { name = "cellpose" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "numpy" },
+    { name = "pyyaml" },
     { name = "scikit-image" },
     { name = "scipy" },
-    { name = "tifffile" },
 ]
 
 [package.metadata]
 requires-dist = [
-    { name = "cellpose", specifier = ">=4" },
     { name = "matplotlib" },
     { name = "networkx" },
     { name = "numpy" },
+    { name = "pyyaml" },
     { name = "scikit-image" },
     { name = "scipy" },
-    { name = "tifffile" },
 ]
 
 [[package]]
