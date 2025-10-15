@@ -139,9 +139,9 @@ class CellTrackingPipeline:
         self,
         npy_path: str,
         yaml_path: Optional[str] = None,
-        start_frame: int = 0,
+        start_frame: Optional[int] = None,
         end_frame: Optional[int] = None,
-        output_dir: str = 'analysis_output'
+        output_dir: str
     ) -> Dict[str, Any]:
         """
         Process cell-filter timelapse data using pre-computed segmentations.
@@ -175,6 +175,8 @@ class CellTrackingPipeline:
         
         # Setup
         n_frames = len(cell_filter_data['segmentation_masks'])
+        if start_frame is None:
+            start_frame = 0
         if end_frame is None:
             end_frame = n_frames
         
@@ -322,8 +324,9 @@ class CellTrackingPipeline:
 def analyze_cell_filter_data(
     npy_path: str,
     yaml_path: Optional[str] = None,
-    output_dir: str = 'analysis_output',
-    start_frame: int = 0,
+    output_dir: str,
+    start_frame: Optional[int] = None,
+    end_frame: Optional[int] = None,
     **pipeline_params
 ) -> Dict[str, Any]:
     """
@@ -355,5 +358,6 @@ def analyze_cell_filter_data(
         npy_path=npy_path,
         yaml_path=yaml_path,
         start_frame=start_frame,
+        end_frame=end_frame,
         output_dir=output_dir
     )

@@ -25,8 +25,8 @@ def main():
     
     parser.add_argument(
         "--output", "-o",
-        default="tracking_output",
-        help="Output directory for analysis results (default: tracking_output)"
+        required=True,
+        help="Output directory for analysis results"
     )
     
     parser.add_argument(
@@ -37,8 +37,7 @@ def main():
     parser.add_argument(
         "--start-frame", "-s",
         type=int,
-        default=0,
-        help="Starting frame number (default: 0)"
+        help="Starting frame number (processes from first frame if not specified)"
     )
     
     parser.add_argument(
@@ -89,7 +88,7 @@ def main():
     else:
         print("Input YAML: Not found, using default channel settings")
     print(f"Output: {args.output}")
-    print(f"Start frame: {args.start_frame}")
+    print(f"Start frame: {args.start_frame if args.start_frame is not None else 'auto (first frame)'}")
     if args.end_frame:
         print(f"End frame: {args.end_frame}")
     print()
