@@ -81,13 +81,21 @@ def plot_nucleus_cytoplasm_trajectories(
     ax.set_aspect('equal')
     ax.grid(True, alpha=0.3)
 
-    # Legend - limit to avoid clutter
-    handles, labels = ax.get_legend_handles_labels()
-    if len(handles) > 20:
-        ax.legend(handles[:20], labels[:20], bbox_to_anchor=(1.05, 1),
-                  loc='upper left', fontsize=8, ncol=1)
-    else:
-        ax.legend(bbox_to_anchor=(1.05, 1), loc='upper left', fontsize=8, ncol=1)
+    # Create custom legend with one entry per cell (not per trajectory type)
+    legend_elements = []
+    for idx, (global_id, traj_data) in enumerate(trajectories.items()):
+        if len(np.array(traj_data['nucleus_positions'])) < 2:
+            continue
+        from matplotlib.lines import Line2D
+        legend_elements.append(
+            Line2D([0], [0], color=colors[idx], lw=2, 
+                   label=f'Cell {global_id}')
+        )
+    
+    if legend_elements:
+        ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), 
+                  loc='upper left', fontsize=8, ncol=1, 
+                  title='Cells (Solid=Nucleus, Dashed=Cytoplasm)')
 
     plt.tight_layout()
     plt.savefig(output_path, dpi=300, bbox_inches='tight')
@@ -154,26 +162,21 @@ def plot_polar_coordinates(
 
         # Plot r vs time (nucleus: solid, cytoplasm: dashed)
         ax1.plot(frames, r_nucleus, '-', color=colors[idx], alpha=0.8,
-                 linewidth=2, markersize=4, label=f'Cell {global_id} (Nucleus)')
+                 linewidth=2, markersize=4)
         ax1.plot(frames, r_cytoplasm, '--', color=colors[idx], alpha=0.6,
-                 linewidth=1.5, markersize=3, label=f'Cell {global_id} (Cytoplasm)')
+                 linewidth=1.5, markersize=3)
 
         # Plot theta vs time (nucleus: solid, cytoplasm: dashed)
         ax2.plot(frames, theta_nucleus, '-', color=colors[idx], alpha=0.8,
-                 linewidth=2, markersize=4, label=f'Cell {global_id} (Nucleus)')
+                 linewidth=2, markersize=4)
         ax2.plot(frames, theta_cytoplasm, '--', color=colors[idx], alpha=0.6,
-                 linewidth=1.5, markersize=3, label=f'Cell {global_id} (Cytoplasm)')
+                 linewidth=1.5, markersize=3)
 
     # Format r plot
     ax1.set_xlabel('Frame', fontsize=12, fontweight='bold')
     ax1.set_ylabel('Distance from origin (pixels)', fontsize=12, fontweight='bold')
     ax1.set_title('Radial Distance (r) vs Time', fontsize=13, fontweight='bold')
     ax1.grid(True, alpha=0.3)
-    handles1, labels1 = ax1.get_legend_handles_labels()
-    if len(handles1) > 20:
-        ax1.legend(handles1[:20], labels1[:20], fontsize=7, ncol=2)
-    else:
-        ax1.legend(fontsize=7, ncol=2)
 
     # Format theta plot
     ax2.set_xlabel('Frame', fontsize=12, fontweight='bold')
@@ -182,11 +185,22 @@ def plot_polar_coordinates(
     ax2.grid(True, alpha=0.3)
     ax2.set_ylim(-180, 180)
     ax2.axhline(y=0, color='k', linestyle='--', alpha=0.3)
-    handles2, labels2 = ax2.get_legend_handles_labels()
-    if len(handles2) > 20:
-        ax2.legend(handles2[:20], labels2[:20], fontsize=7, ncol=2)
-    else:
-        ax2.legend(fontsize=7, ncol=2)
+
+    # Create custom legend for both subplots
+    legend_elements = []
+    for idx, (global_id, traj_data) in enumerate(trajectories.items()):
+        if len(np.array(traj_data['nucleus_positions'])) < 2:
+            continue
+        from matplotlib.lines import Line2D
+        legend_elements.append(
+            Line2D([0], [0], color=colors[idx], lw=2, 
+                   label=f'Cell {global_id}')
+        )
+    
+    if legend_elements:
+        # Add legend to the right subplot only to avoid duplication
+        ax2.legend(handles=legend_elements, fontsize=7, ncol=2,
+                  title='Cells (Solid=Nucleus, Dashed=Cytoplasm)')
 
     plt.suptitle('Polar Coordinates: Nucleus (solid) vs Cytoplasm (dashed)',
                  fontsize=14, fontweight='bold', y=1.02)

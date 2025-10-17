@@ -3,8 +3,9 @@ Cell tracking functionality using btrack (Bayesian Tracker).
 """
 
 import numpy as np
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 import btrack
+import btrack.config
 import btrack.datasets
 from skimage import measure
 
@@ -145,7 +146,6 @@ class CellTracker:
             tracker.configure(self.config)
         else:
             # Use default cell config and customize for better tracking
-            import btrack.config
             default_config = btrack.datasets.cell_config()
             tracker.configure(default_config)
 
@@ -165,17 +165,17 @@ class CellTracker:
 
         # Append objects to tracker
         tracker.append(btrack_objects)
-        print(f"DEBUG: Appended objects to tracker")
+        print("DEBUG: Appended objects to tracker")
 
         # Run tracking
-        print(f"DEBUG: Before track")
+        print("DEBUG: Before track")
         tracker.track(step_size=100)
-        print(f"DEBUG: After track")
+        print("DEBUG: After track")
 
         # Optimize tracks
-        print(f"DEBUG: Before optimize")
+        print("DEBUG: Before optimize")
         tracker.optimize()
-        print(f"DEBUG: After optimize")
+        print("DEBUG: After optimize")
 
         # Store tracks and tracker (need tracker._objects for label lookup)
         self.tracks = tracker.tracks

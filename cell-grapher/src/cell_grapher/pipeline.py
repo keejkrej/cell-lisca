@@ -217,7 +217,7 @@ class CellTrackingPipeline:
 
         # Run tracking on all frames at once
         print("Running btrack on all frames...")
-        all_tracking_maps = self.tracker.track_all_frames()
+        self.tracker.track_all_frames()
         print(f"Tracking complete! Found {len(self.tracker.tracks)} tracks.")
 
         # Now process each frame with tracking results
@@ -251,9 +251,8 @@ class CellTrackingPipeline:
             )
 
             # Trajectory analysis (nucleus and center of mass)
-            trajectory_results = None
             if nucleus_channel is not None:
-                trajectory_results = self.trajectory_analyzer.analyze_frame(
+                self.trajectory_analyzer.analyze_frame(
                     frame_idx, segmentation_mask, tracking_map, nucleus_channel
                 )
 

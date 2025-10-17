@@ -5,7 +5,6 @@ Cell trajectory tracking for nucleus and center of mass analysis.
 import numpy as np
 from typing import Dict, List, Tuple, Optional
 from scipy import ndimage
-from skimage import measure
 
 
 class TrajectoryAnalyzer:
