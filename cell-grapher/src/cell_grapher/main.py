@@ -47,12 +47,17 @@ def main():
     )
     
     parser.add_argument(
-        "--iou-threshold",
+        "--search-radius",
         type=float,
-        default=0.3,
-        help="IoU threshold for cell tracking (default: 0.3)"
+        default=100.0,
+        help="Maximum search radius for cell tracking in pixels (default: 100.0)"
     )
-    
+
+    parser.add_argument(
+        "--tracking-config",
+        help="Path to btrack config JSON file (optional, uses default if not specified)"
+    )
+
     parser.add_argument(
         "--adjacency-method",
         choices=["boundary_length", "centroid_distance"],
@@ -105,6 +110,11 @@ def main():
             sys.exit(1)
     
     try:
+        # Build tracking params
+        tracking_params = {'search_radius': args.search_radius}
+        if args.tracking_config:
+            tracking_params['config'] = args.tracking_config
+
         # Run analysis
         results = analyze_cell_filter_data(
             npy_path=args.input,
@@ -112,7 +122,7 @@ def main():
             output_dir=args.output,
             start_frame=args.start_frame,
             end_frame=args.end_frame,
-            tracking_params={'iou_threshold': args.iou_threshold},
+            tracking_params=tracking_params,
             adjacency_params={'method': args.adjacency_method}
         )
         

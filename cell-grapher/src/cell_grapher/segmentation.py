@@ -51,23 +51,47 @@ class SegmentationLoader:
         
         metadata = {}
         channels = None
+        segmentation_channel_idx = -1  # Default to last channel
+
         if Path(yaml_path).exists():
             with open(yaml_path, 'r') as f:
                 metadata = yaml.safe_load(f)
                 channels = metadata.get('channels', [])
-        
-        # Extract segmentation masks (last channel)
+
+                # Check if data has more channels than YAML lists
+                # (Sometimes segmentation is an unlisted extra channel)
+                if channels and len(channels) < data.shape[1]:
+                    print(f"Note: Data has {data.shape[1]} channels but YAML lists {len(channels)}")
+                    print(f"Checking if last channel (index {data.shape[1]-1}) is better segmentation...")
+
+                    # Use the last channel in data (not YAML)
+                    segmentation_channel_idx = data.shape[1] - 1
+                    print(f"Using channel {segmentation_channel_idx} (unlisted in YAML) as segmentation")
+
+                elif channels:
+                    # Find the segmentation channel index from YAML
+                    for i, channel_name in enumerate(channels):
+                        if channel_name == 'segmentation':
+                            segmentation_channel_idx = i
+                            print(f"Found 'segmentation' channel at index {i}: {channels}")
+                            break
+                    else:
+                        # If 'segmentation' not found in channels, use last channel as fallback
+                        print(f"Warning: 'segmentation' channel not found in YAML. Available channels: {channels}")
+                        print(f"Using last channel (index {segmentation_channel_idx}) as segmentation")
+
+        # Extract segmentation masks using the identified channel
         segmentation_masks = []
         for frame_idx in range(data.shape[0]):
-            mask = data[frame_idx, -1]  # Last channel is segmentation
+            mask = data[frame_idx, segmentation_channel_idx]
             segmentation_masks.append(mask)
-        
+
         return {
             'data': data,
             'segmentation_masks': segmentation_masks,
             'metadata': metadata,
             'channels': channels,
-            'segmentation_channel_idx': -1
+            'segmentation_channel_idx': segmentation_channel_idx
         }
     
     def get_frame_mask(
@@ -77,14 +101,14 @@ class SegmentationLoader:
     ) -> np.ndarray:
         """
         Get segmentation mask for a specific frame.
-        
+
         Parameters
         ----------
         cell_filter_data : dict
             Data from load_cell_filter_data
         frame_idx : int
             Frame index
-            
+
         Returns
         -------
         np.ndarray
@@ -92,8 +116,51 @@ class SegmentationLoader:
         """
         if frame_idx >= len(cell_filter_data['segmentation_masks']):
             raise ValueError(f"Frame index {frame_idx} out of range")
-        
+
         return cell_filter_data['segmentation_masks'][frame_idx]
+
+    def get_nucleus_channel(
+        self,
+        cell_filter_data: Dict[str, any],
+        frame_idx: int,
+        nucleus_channel_name: str = 'cell_ch_1'
+    ) -> Optional[np.ndarray]:
+        """
+        Get nucleus channel for a specific frame.
+
+        Parameters
+        ----------
+        cell_filter_data : dict
+            Data from load_cell_filter_data
+        frame_idx : int
+            Frame index
+        nucleus_channel_name : str
+            Name of nucleus channel in YAML (default: 'cell_ch_1')
+
+        Returns
+        -------
+        Optional[np.ndarray]
+            Nucleus channel image or None if not found
+        """
+        data = cell_filter_data['data']
+        channels = cell_filter_data['channels']
+
+        if frame_idx >= data.shape[0]:
+            raise ValueError(f"Frame index {frame_idx} out of range")
+
+        # Find nucleus channel index
+        nucleus_idx = None
+        if channels:
+            for i, channel_name in enumerate(channels):
+                if channel_name == nucleus_channel_name:
+                    nucleus_idx = i
+                    break
+
+        if nucleus_idx is None:
+            print(f"Warning: Nucleus channel '{nucleus_channel_name}' not found in {channels}")
+            return None
+
+        return data[frame_idx, nucleus_idx]
     
     def get_cell_channels(
         self,

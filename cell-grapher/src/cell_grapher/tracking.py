@@ -1,150 +1,253 @@
 """
-Cell tracking functionality using IoU overlap between frames.
+Cell tracking functionality using btrack (Bayesian Tracker).
 """
 
 import numpy as np
-from typing import Dict
-
-
-def calculate_iou(mask1: np.ndarray, mask2: np.ndarray) -> float:
-    """
-    Calculate Intersection over Union between two binary masks.
-    
-    Parameters
-    ----------
-    mask1, mask2 : np.ndarray
-        Binary masks to compare
-        
-    Returns
-    -------
-    float
-        IoU score between 0 and 1
-    """
-    intersection = np.logical_and(mask1, mask2).sum()
-    union = np.logical_or(mask1, mask2).sum()
-    if union == 0:
-        return 0
-    return intersection / union
+from typing import Dict, List, Optional
+import btrack
+import btrack.datasets
+from skimage import measure
 
 
 class CellTracker:
     """
-    Tracks cells across frames using IoU overlap to maintain consistent identities.
+    Tracks cells across frames using btrack's Bayesian tracking approach.
+
+    This is a robust probabilistic tracking method that handles cell divisions,
+    crowded fields, and occlusions better than simple IoU-based tracking.
     """
-    
-    def __init__(self, iou_threshold: float = 0.3):
+
+    def __init__(
+        self,
+        search_radius: float = 100.0,
+        volume: Optional[tuple] = None,
+        config: Optional[str] = None,
+        min_area: float = 1000.0
+    ):
         """
-        Initialize the cell tracker.
-        
+        Initialize the btrack cell tracker.
+
         Parameters
         ----------
-        iou_threshold : float
-            Minimum IoU score to consider cells as the same across frames
+        search_radius : float
+            Maximum distance to search for matches between frames (in pixels)
+        volume : tuple, optional
+            Tracking volume as ((min_x, max_x), (min_y, max_y), (min_z, max_z))
+            If None, will be set automatically from first frame
+        config : str, optional
+            Path to btrack config JSON file. If None, uses default cell config
+        min_area : float
+            Minimum area (in pixels) for a region to be considered a cell (default: 1000)
         """
-        self.iou_threshold = iou_threshold
-        self.previous_mask = None
-        self.previous_tracking_map = {}
+        self.search_radius = search_radius
+        self.volume = volume
+        self.config = config
+        self.min_area = min_area
+
+        # Storage for segmentation masks and frame indices
+        self.masks = []
+        self.frame_indices = []
         self.next_global_id = 1
-        
+
+        # Will be populated after tracking
+        self.tracks = None
+        self._frame_to_tracking_map = {}
+
     def reset(self):
         """Reset tracking state for a new sequence."""
-        self.previous_mask = None
-        self.previous_tracking_map = {}
+        self.masks = []
+        self.frame_indices = []
         self.next_global_id = 1
-        
-    def track_frame(self, current_mask: np.ndarray) -> Dict[int, int]:
+        self.tracks = None
+        self._frame_to_tracking_map = {}
+
+    def add_frame(self, mask: np.ndarray, frame_idx: int):
         """
-        Track cells in the current frame against the previous frame.
-        
+        Add a segmentation mask for a frame to be tracked.
+
         Parameters
         ----------
-        current_mask : np.ndarray
+        mask : np.ndarray
             Segmentation mask with integer labels for each cell
-            
+        frame_idx : int
+            Frame index (time point)
+        """
+        self.masks.append(mask)
+        self.frame_indices.append(frame_idx)
+
+    def track_all_frames(self) -> Dict[int, Dict[int, int]]:
+        """
+        Run btrack on all accumulated frames and generate tracking maps.
+
         Returns
         -------
-        Dict[int, int]
-            Mapping from current frame labels to global cell IDs
+        Dict[int, Dict[int, int]]
+            Mapping from frame_idx to tracking_map (local_label -> global_id)
         """
-        tracking_map = {}
-        current_labels = np.unique(current_mask)[1:]  # Exclude background (0)
-        
-        if self.previous_mask is None:
-            # First frame - assign initial global IDs
-            for i, label in enumerate(current_labels):
-                tracking_map[label] = self.next_global_id + i
-            self.next_global_id += len(current_labels)
+        if not self.masks:
+            return {}
+
+        # Convert segmentation masks to btrack objects manually
+        # We need to extract region properties for each labeled region in each frame
+        objects = []
+
+        for t, (mask, frame_idx) in enumerate(zip(self.masks, self.frame_indices)):
+            # Get region properties for this frame
+            regions = measure.regionprops(mask)
+
+            for region in regions:
+                # Filter out small regions (noise)
+                if region.area < self.min_area:
+                    continue
+
+                # Create btrack object for this cell
+                y, x = region.centroid
+                area = region.area
+                label = region.label
+
+                # Create object dictionary (btrack expects this format)
+                obj = {
+                    't': t,  # Time index (0-based for btrack)
+                    'x': x,
+                    'y': y,
+                    'z': 0.0,  # 2D data
+                    'label': label,
+                    'area': area
+                }
+                objects.append(obj)
+
+        print(f"DEBUG: Created {len(objects)} objects from {len(self.masks)} frames")
+
+        # Convert list of dicts to dict of arrays (format btrack expects)
+        if objects:
+            objects_dict = {
+                't': np.array([obj['t'] for obj in objects]),
+                'x': np.array([obj['x'] for obj in objects]),
+                'y': np.array([obj['y'] for obj in objects]),
+                'z': np.array([obj['z'] for obj in objects]),
+                'label': np.array([obj['label'] for obj in objects]),
+                'area': np.array([obj['area'] for obj in objects])
+            }
+
+            # Convert to btrack objects using the proper API
+            btrack_objects = btrack.utils.objects_from_dict(objects_dict)
+            print(f"DEBUG: Converted to {len(btrack_objects)} btrack objects")
         else:
-            # Track against previous frame
-            tracking_map = self._match_cells(current_mask, current_labels)
-        
-        # Update state for next frame
-        self.previous_mask = current_mask.copy()
-        self.previous_tracking_map = tracking_map.copy()
-        
-        return tracking_map
-    
-    def _match_cells(self, current_mask: np.ndarray, current_labels: np.ndarray) -> Dict[int, int]:
+            print("ERROR: No objects created!")
+            return {}
+
+        # Initialize tracker WITHOUT context manager
+        # (context manager seems to close prematurely)
+        tracker = btrack.BayesianTracker()
+
+        # Configure tracker
+        if self.config:
+            tracker.configure(self.config)
+        else:
+            # Use default cell config and customize for better tracking
+            import btrack.config
+            default_config = btrack.datasets.cell_config()
+            tracker.configure(default_config)
+
+            # Increase max_lost to allow cells to be missing for more frames
+            # Default is 5, increase to 10 for more robust tracking
+            tracker.motion_model.max_lost = 10
+
+            # Increase search radius to handle larger movements
+            tracker.max_search_radius = int(self.search_radius)
+
+        # Set volume if not provided
+        if self.volume is None:
+            height, width = self.masks[0].shape
+            self.volume = ((0, width), (0, height))
+
+        tracker.volume = self.volume
+
+        # Append objects to tracker
+        tracker.append(btrack_objects)
+        print(f"DEBUG: Appended objects to tracker")
+
+        # Run tracking
+        print(f"DEBUG: Before track")
+        tracker.track(step_size=100)
+        print(f"DEBUG: After track")
+
+        # Optimize tracks
+        print(f"DEBUG: Before optimize")
+        tracker.optimize()
+        print(f"DEBUG: After optimize")
+
+        # Store tracks and tracker (need tracker._objects for label lookup)
+        self.tracks = tracker.tracks
+        self._tracker = tracker
+        print(f"DEBUG: Got {len(self.tracks)} tracks")
+
+        # Build frame-by-frame tracking maps
+        self._build_tracking_maps()
+
+        return self._frame_to_tracking_map
+
+    def _build_tracking_maps(self):
         """
-        Match cells between current and previous frames using IoU.
-        
+        Build tracking maps from btrack results.
+
+        Creates a mapping from (frame_idx, local_label) -> global_track_id
+        """
+        if not self.tracks:
+            return
+
+        # Initialize tracking maps for each frame
+        for frame_idx in self.frame_indices:
+            self._frame_to_tracking_map[frame_idx] = {}
+
+        # For each track, map its objects to global track ID
+        for track in self.tracks:
+            global_id = track.ID
+
+            # track.refs contains indices into tracker._objects
+            # Use track.t array for frame indices and access objects via refs
+            for i, ref_idx in enumerate(track.refs):
+                frame_idx = int(track.t[i])
+
+                # Get the original object to access its label
+                obj = self._tracker._objects[ref_idx]
+                local_label = int(obj.label)
+
+                # Map local label to global track ID
+                if frame_idx in self._frame_to_tracking_map:
+                    self._frame_to_tracking_map[frame_idx][local_label] = global_id
+
+    def get_tracking_map(self, frame_idx: int) -> Dict[int, int]:
+        """
+        Get tracking map for a specific frame.
+
         Parameters
         ----------
-        current_mask : np.ndarray
-            Current frame segmentation mask
-        current_labels : np.ndarray
-            Array of current frame cell labels
-            
+        frame_idx : int
+            Frame index
+
         Returns
         -------
         Dict[int, int]
-            Mapping from current labels to global IDs
+            Mapping from local labels to global track IDs
         """
-        tracking_map = {}
-        previous_labels = np.unique(self.previous_mask)[1:]  # Exclude background (0)
-        
-        # Calculate IoU matrix
-        iou_matrix = np.zeros((len(current_labels), len(previous_labels)))
-        for i, curr_label in enumerate(current_labels):
-            curr_mask_binary = current_mask == curr_label
-            for j, prev_label in enumerate(previous_labels):
-                prev_mask_binary = self.previous_mask == prev_label
-                iou_matrix[i, j] = calculate_iou(curr_mask_binary, prev_mask_binary)
-        
-        # Assign global IDs based on best IoU matches
-        used_previous = set()
-        
-        for i, curr_label in enumerate(current_labels):
-            best_j = np.argmax(iou_matrix[i, :])
-            best_iou = iou_matrix[i, best_j]
-            prev_label = previous_labels[best_j]
-            
-            if best_iou > self.iou_threshold and prev_label not in used_previous:
-                # Good match found - use existing global ID
-                tracking_map[curr_label] = self.previous_tracking_map[prev_label]
-                used_previous.add(prev_label)
-            else:
-                # New cell or poor match - assign new global ID
-                tracking_map[curr_label] = self.next_global_id
-                self.next_global_id += 1
-        
-        return tracking_map
-    
+        return self._frame_to_tracking_map.get(frame_idx, {})
+
     def create_tracked_mask(self, original_mask: np.ndarray, tracking_map: Dict[int, int]) -> np.ndarray:
         """
-        Create a mask with global IDs for consistent visualization.
-        
+        Create a mask with global track IDs for consistent visualization.
+
         Parameters
         ----------
         original_mask : np.ndarray
             Original segmentation mask with local labels
         tracking_map : Dict[int, int]
-            Mapping from local labels to global IDs
-            
+            Mapping from local labels to global track IDs
+
         Returns
         -------
         np.ndarray
-            Mask with global IDs instead of local labels
+            Mask with global track IDs instead of local labels
         """
         tracked_mask = np.zeros_like(original_mask)
         for local_label, global_id in tracking_map.items():

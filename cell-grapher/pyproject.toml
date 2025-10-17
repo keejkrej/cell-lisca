@@ -20,6 +20,7 @@ dependencies = [
     "scipy",
     "pyyaml",
     "opencv-python",
+    "btrack",
 ]
 
 [project.scripts]
