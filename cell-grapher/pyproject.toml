@@ -6,7 +6,6 @@ build-backend = "hatchling.build"
 name = "cell-grapher"
 version = "0.1.0"
 description = "A tool for creating region adjacency graphs and analyzing T1 transitions in microscopy images"
-readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
