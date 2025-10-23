@@ -4,7 +4,7 @@ A comprehensive toolkit for analyzing micropatterned timelapse microscopy images
 
 ## Overview
 
-Cell-LISCA is a multi-package Python workspace that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of three integrated applications that work together to provide a complete analysis pipeline:
+cell-lisca is a multi-package Python workspace that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of three integrated applications that work together to provide a complete analysis pipeline:
 
 1. **cell-filter**: Pattern detection, cell counting, and data extraction with segmentation
 2. **cell-grapher**: Cell tracking, region adjacency graph construction, and T1 transition analysis
@@ -271,7 +271,7 @@ MIT License - see individual package LICENSE files for details.
 If you use this software in your research, please cite:
 
 ```
-Cell-LISCA: Live-cell Imaging of Self-organizing Cellular Arrays
+cell-lisca: Cell Migration Studies with Live Cell Imaging of Single Cell Arrays
 Tianyi Cao
 ```
 
