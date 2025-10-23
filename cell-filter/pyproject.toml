@@ -25,12 +25,11 @@ dependencies = [
     "tifffile",
     "networkx",
     "pyyaml",
+    "typer",
 ]
 
 [project.scripts]
-cell-filter-pattern = "cell_filter.pattern.main:main"
-cell-filter-filter = "cell_filter.filter.main:main"
-cell-filter-extract = "cell_filter.extract.main:main"
+cell-filter = "cell_filter.main:app"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/cell_filter"]
