@@ -115,28 +115,50 @@ python -m cell_viewer
 
 ### Basic Workflow
 
-1. **Pattern Detection**: Identify micropatterns in your microscopy data
+1. **Pattern Detection**: Show/save a plot of the patterns marked with bounding boxes
 
 ```bash
-python -m cell_filter.pattern --patterns patterns.nd2 --cells cells.nd2 --fov-all --output ./patterns
+python -m cell_filter.pattern \
+  --patterns /path/to/patterns.nd2 \
+  --cells /path/to/cells.nd2 \
+  --nuclei-channel 1 \
+  --fov 0 \
+  --output ./output
+```
+You will find `fov_000.png` in the output folder.
+
+2. **Cell Filtering**: Filter the timelapse based on number of cells
+
+```bash
+python -m cell_filter.filter \
+  --patterns /path/to/patterns.nd2 \
+  --cells /path/to/cells.nd2 \
+  --nuclei-channel 1 \
+  --n-cells 4 \
+  --output ./output/ \
+  --range 0:1 \
+  --min-size 30
 ```
 
-2. **Cell Filtering**: Filter frames based on cell count criteria
+3. **Data Extraction**: Extract the timelapse of filtered cells
 
 ```bash
-python -m cell_filter.filter --patterns patterns.nd2 --cells cells.nd2 --n-cells 4 --all --output ./filtered
-```
-
-3. **Data Extraction**: Extract data with segmentation masks
-
-```bash
-python -m cell_filter.extract --patterns patterns.nd2 --cells cells.nd2 --filter-results ./filtered --output ./extracted
+python -m cell_filter.extract \
+  --patterns /path/to/patterns.nd2 \
+  --cells /path/to/cells.nd2 \
+  --nuclei-channel 1 \
+  --filter-results ./output/ \
+  --output ./output/ \
+  --min-frames 20 \
+  --max-gap 6
 ```
 
 4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
 
 ```bash
-python -m cell_grapher --input ./extracted/fov_000_pattern_000_seq_000.npy --output ./analysis
+python -m cell_grapher \
+  --input ./output/fov_000_pattern_000_seq_000.npy \
+  --output ./analysis
 ```
 
 5. **Visualization**: Interactively view and select frames
