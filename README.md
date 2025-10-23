@@ -99,17 +99,24 @@ To verify installation, run:
 
 ```bash
 # Test cell-filter modules
-python -m cell_filter.pattern --help
-python -m cell_filter.filter --help
-python -m cell_filter.extract --help
+cell-filter-pattern --help
+cell-filter-filter --help
+cell-filter-extract --help
 
 # Test cell-grapher
-python -m cell_grapher --help
+cell-grapher --help
 
 # Test cell-viewer
-python -m cell_viewer
+cell-viewer
 # (should launch the GUI application)
 ```
+
+**Note**: You can also use the `python -m` syntax if preferred:
+- `python -m cell_filter.pattern` instead of `cell-filter-pattern`
+- `python -m cell_filter.filter` instead of `cell-filter-filter`
+- `python -m cell_filter.extract` instead of `cell-filter-extract`
+- `python -m cell_grapher` instead of `cell-grapher`
+- `python -m cell_viewer` instead of `cell-viewer`
 
 ## Quick Start
 
@@ -118,7 +125,7 @@ python -m cell_viewer
 1. **Pattern Detection**: Show/save a plot of the patterns marked with bounding boxes
 
 ```bash
-python -m cell_filter.pattern \
+cell-filter-pattern \
   --patterns /path/to/patterns.nd2 \
   --cells /path/to/cells.nd2 \
   --nuclei-channel 1 \
@@ -130,7 +137,7 @@ You will find `fov_000.png` in the output folder.
 2. **Cell Filtering**: Filter the timelapse based on number of cells
 
 ```bash
-python -m cell_filter.filter \
+cell-filter-filter \
   --patterns /path/to/patterns.nd2 \
   --cells /path/to/cells.nd2 \
   --nuclei-channel 1 \
@@ -143,7 +150,7 @@ python -m cell_filter.filter \
 3. **Data Extraction**: Extract the timelapse of filtered cells
 
 ```bash
-python -m cell_filter.extract \
+cell-filter-extract \
   --patterns /path/to/patterns.nd2 \
   --cells /path/to/cells.nd2 \
   --nuclei-channel 1 \
@@ -156,7 +163,7 @@ python -m cell_filter.extract \
 4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
 
 ```bash
-python -m cell_grapher \
+cell-grapher \
   --input ./output/fov_000_pattern_000_seq_000.npy \
   --output ./analysis
 ```
@@ -164,7 +171,7 @@ python -m cell_grapher \
 5. **Visualization**: Interactively view and select frames
 
 ```bash
-python -m cell_viewer
+cell-viewer
 # Then open files through the application's file menu
 ```
 

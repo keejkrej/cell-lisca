@@ -19,11 +19,11 @@ This is a multi-package repository with three Python packages. Run commands from
   - `python -m pytest tests/test_specific.py::test_function -v`
 
 ### Module Entry Points
-- **cell-viewer**: `python -m cell_viewer` or `python src/cell_viewer/main.py`
-- **cell-filter pattern**: `python -m cell_filter.pattern`
-- **cell-filter filter**: `python -m cell_filter.filter`
-- **cell-filter extract**: `python -m cell_filter.extract`
-- **cell-grapher**: `python -m cell_grapher --input xxx.npy --output ./output`
+- **cell-viewer**: `cell-viewer` or `python -m cell_viewer`
+- **cell-filter pattern**: `cell-filter-pattern` or `python -m cell_filter.pattern`
+- **cell-filter filter**: `cell-filter-filter` or `python -m cell_filter.filter`
+- **cell-filter extract**: `cell-filter-extract` or `python -m cell_filter.extract`
+- **cell-grapher**: `cell-grapher --input xxx.npy --output ./output` or `python -m cell_grapher --input xxx.npy --output ./output`
 
 ## Code Style Guidelines
 

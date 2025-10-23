@@ -25,6 +25,8 @@ Or via Python module:
 python -m cell_grapher --input data.npy --output ./output
 ```
 
+**Note**: The `cell-grapher` script is recommended for easier usage.
+
 ### Command Line Options
 
 | Option               | Description                                      | Default                       |

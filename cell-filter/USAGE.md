@@ -78,6 +78,8 @@ Or via Python module:
 python -m cell_filter.filter [options]
 ```
 
+**Note**: The `cell-filter-filter` script is recommended for easier usage.
+
 ### Options
 
 | Option             | Description                              | Default                                         |
@@ -138,6 +140,8 @@ Or via Python module:
 ```bash
 python -m cell_filter.extract [options]
 ```
+
+**Note**: The `cell-filter-extract` script is recommended for easier usage.
 
 ### Options
 

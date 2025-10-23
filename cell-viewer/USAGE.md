@@ -31,12 +31,9 @@ python -m cell_viewer
 ```bash
 # Launch the application
 cell-viewer
-
-# Launch via module
-python -m cell_viewer
 ```
 
-**Note**: The cell-viewer application does not accept command-line file arguments. Files must be opened through the application's file menu after launch.
+**Note**: The `cell-viewer` script is recommended for easier usage. The application does not accept command-line file arguments. Files must be opened through the application's file menu after launch.
 
 ## User Interface Overview
 
