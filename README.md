@@ -98,16 +98,16 @@ pip install -e .
 To verify installation, run:
 
 ```bash
-# Test cell-filter
-cell-filter-pattern --help
-cell-filter-filter --help
-cell-filter-extract --help
+# Test cell-filter modules
+python -m cell_filter.pattern --help
+python -m cell_filter.filter --help
+python -m cell_filter.extract --help
 
 # Test cell-grapher
-cell-grapher --help
+python -m cell_grapher --help
 
 # Test cell-viewer
-cell-viewer
+python -m cell_viewer
 # (should launch the GUI application)
 ```
 
@@ -118,31 +118,31 @@ cell-viewer
 1. **Pattern Detection**: Identify micropatterns in your microscopy data
 
 ```bash
-cell-filter-pattern --patterns patterns.nd2 --cells cells.nd2 --fov-all --output ./patterns
+python -m cell_filter.pattern --patterns patterns.nd2 --cells cells.nd2 --fov-all --output ./patterns
 ```
 
 2. **Cell Filtering**: Filter frames based on cell count criteria
 
 ```bash
-cell-filter-filter --patterns patterns.nd2 --cells cells.nd2 --n-cells 4 --all --output ./filtered
+python -m cell_filter.filter --patterns patterns.nd2 --cells cells.nd2 --n-cells 4 --all --output ./filtered
 ```
 
 3. **Data Extraction**: Extract data with segmentation masks
 
 ```bash
-cell-filter-extract --patterns patterns.nd2 --cells cells.nd2 --filter-results ./filtered --output ./extracted
+python -m cell_filter.extract --patterns patterns.nd2 --cells cells.nd2 --filter-results ./filtered --output ./extracted
 ```
 
 4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
 
 ```bash
-cell-grapher --input ./extracted/fov_000_pattern_000_seq_000.npy --output ./analysis
+python -m cell_grapher --input ./extracted/fov_000_pattern_000_seq_000.npy --output ./analysis
 ```
 
 5. **Visualization**: Interactively view and select frames
 
 ```bash
-cell-viewer
+python -m cell_viewer
 # Then open files through the application's file menu
 ```
 
@@ -183,6 +183,7 @@ cell-lisca/
 **cell-filter**:
 
 - torch
+- matplotlib
 - opencv-python
 - cellpose>4
 - nd2
@@ -192,18 +193,25 @@ cell-lisca/
 - scipy
 - tifffile
 - networkx
+- pyyaml
 
 **cell-grapher**:
 
+- numpy
+- matplotlib
 - scikit-image
 - networkx
 - scipy
+- pyyaml
 - opencv-python
 - btrack
 
 **cell-viewer**:
 
 - PySide6
+- numpy
+- matplotlib
+- pyyaml>=6.0.2
 
 ## Development
 
@@ -218,7 +226,7 @@ cd cell-viewer && python -m pytest tests/ -v
 
 ### Code Style
 
-This project follows the development guidelines outlined in [CRUSH.md](CRUSH.md), including:
+This project follows the development guidelines outlined in [CLAUDE.md](CLAUDE.md), including:
 
 - Google-style docstrings
 - Type hints with modern union syntax
