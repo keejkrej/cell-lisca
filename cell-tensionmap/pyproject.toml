@@ -1,0 +1,29 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cell-tensionmap"
+version = "0.1.0"
+description = "Wrapper package for TensionMap VMSI within Cell‑LISCA"
+authors = [{name = "Factory-Droid"}]
+requires-python = ">=3.9"
+# Core dependencies
+dependencies = [
+    "numpy",
+    "scipy",
+    "scikit-image",
+    "matplotlib",
+    "pandas",
+    "scikit-learn",
+    "cellpose",
+]
+
+[tool.setuptools]
+packages = {find = {where = ["src"]}}
+
+[project.optional-dependencies]
+# optional extras can be added here
+
+[project.scripts]
+cell-tensionmap = "cell_tensionmap.cli:app"

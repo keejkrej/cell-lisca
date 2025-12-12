@@ -1,68 +1,31 @@
 # Cell Filter Usage Guide
 
-Cell Filter is a comprehensive tool for processing micropatterned timelapse microscopy images. It consists of three main modules that work together to detect patterns, filter frames based on cell count, and extract data with segmentation masks.
+Cell Filter is a tool for processing and filtering micropatterned timelapse microscopy images based on cell count. It works with the separate cell-pattern package to provide a complete analysis pipeline.
 
 ## Overview
 
-Cell Filter processes microscopy data through a three-stage pipeline:
+Cell Filter works as part of a four-stage pipeline for microscopy image analysis:
 
-1. **Pattern Module**: Detects and visualizes micropatterns in images
-2. **Filter Module**: Filters frames based on nuclei count criteria
-3. **Extract Module**: Extracts data with segmentation masks using Cellpose
+1. **Pattern Detection** (cell-pattern): Detects and visualizes micropatterns in images
+2. **Filter Module** (cell-filter): Filters frames based on nuclei count criteria  
+3. **Extract Module** (cell-filter): Extracts data with segmentation masks using Cellpose
+4. **Downstream Analysis**: Cell tracking, graph construction, and tension inference
 
-## Module 1: Pattern Detection
+## Prerequisites
 
-The pattern module identifies micropatterns in your microscopy images and creates visualizations with bounding boxes.
+Before using cell-filter, you must first detect patterns using the separate **cell-pattern** package:
+
+```bash
+# Install the complete workspace
+uv sync
+
+# Run pattern detection
+cell-pattern --patterns patterns.nd2 --cells cells.nd2 --output ./patterns
+```
 
 ### Command Line Usage
 
-```bash
-cell-filter-pattern [options]
-```
-
-Or via Python module:
-
-```bash
-python -m cell_filter.pattern [options]
-```
-
-### Options
-
-| Option             | Description                    | Default                                         |
-| ------------------ | ------------------------------ | ----------------------------------------------- |
-| `--patterns`       | Path to patterns ND2 file      | `data/20250806_patterns_after.nd2`              |
-| `--cells`          | Path to cells ND2 file         | `data/20250806_MDCK_timelapse_crop_fov0004.nd2` |
-| `--nuclei-channel` | Nuclei channel index           | `1`                                             |
-| `--fov`            | Field of view index to process | `0`                                             |
-| `--fov-all`        | Process all fields of view     | `False`                                         |
-| `--output`         | Output directory               | `None` (current directory)                      |
-| `--debug`          | Enable debug logging           | `False`                                         |
-
-### Examples
-
-```bash
-# Process specific FOV
-cell-filter-pattern \
-  --patterns patterns.nd2 \
-  --cells cells.nd2 \
-  --nuclei-channel 1 \
-  --fov 0 \
-  --output ./pattern_output
-
-# Process all FOVs
-cell-filter-pattern \
-  --patterns patterns.nd2 \
-  --cells cells.nd2 \
-  --fov-all \
-  --output ./pattern_output
-```
-
-### Output
-
-- **PNG Images**: `fov_{idx:03d}.png` - Annotated pattern images with green bounding boxes
-- **Dimensions**: 15x8 inch figures with tight layout
-
-## Module 2: Cell Filtering
+## Module 1: Cell Filtering
 
 The filter module analyzes frames and filters them based on nuclei count criteria.
 

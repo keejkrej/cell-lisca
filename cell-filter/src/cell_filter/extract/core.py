@@ -1,47 +1,74 @@
 """
 Core extractor functionality for cell-filter.
+
+This module extracts cropped image sequences based on cell count analysis,
+applying user-specified criteria and outputting to H5 format.
 """
 
-import yaml
 from pathlib import Path
 import numpy as np
 from cell_filter.core import Cropper, CropperParameters, CellposeSegmenter
 import logging
+from typing import Dict, List, Any, Tuple
+import sys
+import os
+
+# Add cell-pattern to path for importing h5_io utilities
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'cell-pattern', 'src'))
+
+from cell_pattern.utils.h5_io import (
+    get_fov_bounding_boxes,
+    load_analysis_h5,
+    get_analysis_for_fov,
+    append_extracted_sequence,
+    finalize_extracted_metadata,
+)
 
 # Configure logging
 logger = logging.getLogger(__name__)
 
 
 class Extractor:
-    """Extract frames and patterns from filtering results."""
+    """Extract sequences from analysis results based on cell count criteria."""
 
     # Constructor
 
     def __init__(
         self,
-        patterns_path: str,
         cells_path: str,
-        output_folder: str,
+        h5_path: str,
         nuclei_channel: int,
     ) -> None:
-        """Initialize Extractor with paths and configuration."""
-        self.patterns_path = str(Path(patterns_path).resolve())
+        """Initialize Extractor with paths and configuration.
+        
+        Parameters
+        ----------
+        cells_path : str
+            Path to cells ND2 file
+        h5_path : str
+            Path to H5 file containing bounding boxes and analysis data
+        nuclei_channel : int
+            Channel index for nuclei
+        """
         self.cells_path = str(Path(cells_path).resolve())
-        self.output_folder = str(Path(output_folder).resolve())
+        self.h5_path = str(Path(h5_path).resolve())
+        self.nuclei_channel = nuclei_channel
 
-        # Initialize comprehensive segmentation (always enabled)
-        # Note: GPU validation should have been performed at application entrypoints
+        # Initialize segmenter
         self.segmenter = CellposeSegmenter()
-        logger.info("Comprehensive segmentation initialized")
+        logger.info("Cellpose segmenter initialized")
 
         try:
             self.cropper = Cropper(
-                patterns_path,
-                cells_path,
+                patterns_path=None,
+                cells_path=cells_path,
                 parameters=CropperParameters(nuclei_channel=nuclei_channel),
             )
+            
+            # Load analysis metadata to verify it exists
+            self.analysis_metadata = load_analysis_h5(h5_path)
             logger.info(
-                f"Successfully initialized Extractor with patterns: {patterns_path} and cells: {cells_path}"
+                f"Initialized Extractor with {self.analysis_metadata['total_records']} analysis records"
             )
         except Exception as e:
             logger.error(f"Error initializing Extractor: {e}")
@@ -49,264 +76,317 @@ class Extractor:
 
     # Private Methods
 
-    def _refine_filter_results(
-        self, filter_results: dict[int, list[int]], min_frames: int, max_gap: int = 6
-    ) -> dict[int, list[int]]:
-        """Refine filter results by splitting gaps and filtering by minimum frames."""
-        refined_results = {}
-
-        for pattern_idx, frames in filter_results.items():
-            if not frames:
-                continue
-
-            # Sort frames to ensure chronological order
-            frames.sort()
-
-            # Initialize variables for current sequence
-            sequence_start = frames[0]
-            current_end = frames[0]
-            sequences = []
-
-            # Process frames to find gaps
-            for i in range(1, len(frames)):
-                gap = frames[i] - frames[i - 1]
-                if gap > max_gap:
-                    # Large gap found, save current sequence and start new one
-                    sequences.append([sequence_start, current_end])
-                    sequence_start = frames[i]
-                    current_end = frames[i]
-                else:
-                    current_end = frames[i]
-
-            # Add the last sequence
-            sequences.append([sequence_start, current_end])
-
-            # Add sequences to refined time lapse with new pattern indices
-            for i, (start, end) in enumerate(sequences):
-                # Format pattern index with leading zeros (3 digits)
-                if end - start <= min_frames:
-                    continue
-                new_pattern_idx = int(f"{pattern_idx:03d}{i:03d}")
-                refined_results[new_pattern_idx] = [start, end]
-
-                logger.debug(
-                    f"Split pattern {pattern_idx} into {len(sequences)} sequences"
-                )
-                logger.debug(f"Sequence {i}: frames {start} to {end}")
-
-        return refined_results
+    def _find_valid_sequences(
+        self,
+        cell_counts: Dict[int, int],
+        n_cells: int,
+        tolerance_gap: int,
+        min_frames: int,
+        total_frames: int,
+    ) -> List[Tuple[int, int, int]]:
+        """Find valid frame sequences where cell count matches criteria.
+        
+        Parameters
+        ----------
+        cell_counts : dict
+            Mapping of frame_index -> cell_count for a pattern
+        n_cells : int
+            Target number of cells
+        tolerance_gap : int
+            Max consecutive frames with wrong cell count allowed
+        min_frames : int
+            Minimum sequence length
+        total_frames : int
+            Total number of frames in the timelapse
+            
+        Returns
+        -------
+        list
+            List of (seq_idx, start_frame, end_frame) tuples
+        """
+        if not cell_counts:
+            return []
+        
+        # Find frames where count matches
+        matching_frames = sorted([
+            frame for frame, count in cell_counts.items()
+            if count == n_cells
+        ])
+        
+        if not matching_frames:
+            return []
+        
+        # Group into sequences allowing tolerance_gap gaps
+        sequences = []
+        seq_idx = 0
+        current_start = matching_frames[0]
+        current_end = matching_frames[0]
+        
+        for i in range(1, len(matching_frames)):
+            gap = matching_frames[i] - matching_frames[i - 1] - 1
+            
+            if gap <= tolerance_gap:
+                # Continue current sequence
+                current_end = matching_frames[i]
+            else:
+                # Gap too large, save current sequence if long enough
+                seq_length = current_end - current_start + 1
+                if seq_length >= min_frames:
+                    sequences.append((seq_idx, current_start, current_end))
+                    seq_idx += 1
+                
+                # Start new sequence
+                current_start = matching_frames[i]
+                current_end = matching_frames[i]
+        
+        # Add last sequence if long enough
+        seq_length = current_end - current_start + 1
+        if seq_length >= min_frames:
+            sequences.append((seq_idx, current_start, current_end))
+        
+        return sequences
 
     def _add_head_tail(
-        self, filter_results: dict[int, list[int]], n_frames: int = 3
-    ) -> dict[int, list[int]]:
-        """Add head and tail frames to filter result sequences."""
-        extended_results = {}
+        self, 
+        start_frame: int, 
+        end_frame: int, 
+        total_frames: int,
+        n_frames: int = 3
+    ) -> Tuple[int, int]:
+        """Add head and tail frames to a sequence."""
+        new_start = max(0, start_frame - n_frames)
+        new_end = min(total_frames - 1, end_frame + n_frames)
+        return new_start, new_end
 
-        # Get total number of frames from the cropper
-        total_frames = self.cropper.n_frames
-
-        for pattern_idx, (start, end) in filter_results.items():
-            # Add head frames (before start)
-            new_start = max(0, start - n_frames)
-
-            # Add tail frames (after end), but don't exceed total_frames
-            new_end = min(total_frames - 1, end + n_frames)
-
-            extended_results[pattern_idx] = [new_start, new_end]
-
-            logger.debug(
-                f"Extended pattern {pattern_idx} with {start - new_start} head frames and {new_end - end} tail frames"
-            )
-
-        return extended_results
-
-    def _extract_frame_stack(
+    def _extract_sequence(
         self,
+        fov_idx: int,
         pattern_idx: int,
+        seq_idx: int,
         start_frame: int,
         end_frame: int,
-        npy_output_path: Path,
-        yaml_output_path: Path,
-    ) -> None:
-        """Extract and save frame stack for a pattern sequence with optional segmentation."""
-
+    ) -> np.ndarray:
+        """Extract and return frame stack for a sequence with segmentation.
+        
+        Returns
+        -------
+        np.ndarray
+            Stack of shape (n_frames, n_channels+2, h, w)
+            Channels: [pattern, cell_channels..., segmentation]
+        """
         pattern = self.cropper.extract_pattern(pattern_idx)  # (h, w)
 
-        # Initialize stacks for all cell regions and segmentation
         cell_stack = []
         segmentation_stack = []
 
-        # Extract frames
         for frame_idx in range(start_frame, end_frame + 1):
-            # Load all cell channels at once
             self.cropper.load_cell(frame_idx)
-
-            # Extract regions from all cell channels at once
-            cell = self.cropper.extract_cell(pattern_idx)
-
-            # Stack all cell regions together
+            cell = self.cropper.extract_cell(pattern_idx)  # (n_channels, h, w)
             cell_stack.append(cell)
 
-            # Perform segmentation (always enabled)
-            # Combine cell channels for segmentation input
-            # cell has shape (n_channels, h, w) - need to transpose for segmentation
+            # Segment using all channels
             cell_for_segmentation = np.transpose(cell, (1, 2, 0))  # (h, w, n_channels)
-
-            # Perform segmentation with all channels
-            # Cellpose can handle both single channel (h, w) and multi-channel (h, w, channels)
             seg_result = self.segmenter.segment_image(cell_for_segmentation)
-            segmentation_mask = seg_result["masks"]  # (h, w) with local IDs
+            segmentation_stack.append(seg_result["masks"])
 
-            segmentation_stack.append(segmentation_mask)
-
-        # Calculate number of frames in this sequence
         n_frames = end_frame - start_frame + 1
+        cell_array = np.array(cell_stack)  # (n_frames, n_channels, h, w)
+        segmentation_array = np.array(segmentation_stack)  # (n_frames, h, w)
 
-        # Convert cell regions stack to numpy array
-        # cell_stack is a list of arrays, each with shape (n_channels, h, w)
-        cell_array = np.array(cell_stack)  # Shape: (n_frames, n_channels, h, w)
-
-        # Convert segmentation stack to numpy array
-        # segmentation_stack is a list of arrays, each with shape (h, w)
-        segmentation_array = np.array(segmentation_stack)  # Shape: (n_frames, h, w)
-
-        # Add channel dimension to segmentation
-        segmentation_with_channel = segmentation_array[:, np.newaxis, :, :]  # Shape: (n_frames, 1, h, w)
-
-        # Expand pattern to match frame dimensions
-        # pattern has shape (h, w), so we add new axes to make it (1, h, w)
-        # then broadcast to (n_frames, h, w)
+        # Add channel dimensions
+        segmentation_with_channel = segmentation_array[:, np.newaxis, :, :]
         pattern_expanded = np.broadcast_to(
             pattern[np.newaxis, :, :], (n_frames, pattern.shape[0], pattern.shape[1])
-        )  # Shape: (n_frames, h, w)
+        )
+        pattern_with_channel = pattern_expanded[:, np.newaxis, :, :]
 
-        # Add channel dimension to pattern to make it (n_frames, 1, h, w)
-        pattern_with_channel = pattern_expanded[:, np.newaxis, :, :]  # Shape: (n_frames, 1, h, w)
-
-        # Stack pattern, cell data, and segmentation along channel axis
-        # Order: pattern first, then cell channels, then segmentation
-        # Resulting shape: (n_frames, n_channels+2, h, w)
+        # Stack: pattern, cells, segmentation
         final_stack = np.concatenate(
             [pattern_with_channel, cell_array, segmentation_with_channel], axis=1
         )
 
-        # Prepare metadata for npy
-        pattern_bbox = (
-            self.cropper.bounding_boxes[pattern_idx]
-            if self.cropper.bounding_boxes
-            else None
-        )
+        return final_stack
 
-        # Prepare channel info and simple JSON metadata
-        n_cell_channels = cell_array.shape[1]
-
-        # Get actual channel names from ND2 file
+    def _get_channel_names(self, n_cell_channels: int) -> List[str]:
+        """Get channel names for the extracted data."""
         if hasattr(self.cropper, 'cells_channel_names') and self.cropper.cells_channel_names:
-            # Use actual channel names from ND2 file (validation done at initialization)
-            channel_names = ["pattern"] + self.cropper.cells_channel_names + ["segmentation"]
+            return ["pattern"] + self.cropper.cells_channel_names + ["segmentation"]
         else:
-            # Fallback to generic names
-            channel_names = ["pattern"] + [f"cell_ch_{i}" for i in range(n_cell_channels)] + ["segmentation"]
+            return ["pattern"] + [f"cell_ch_{i}" for i in range(n_cell_channels)] + ["segmentation"]
 
-        # Save as npy
-        np.save(npy_output_path, final_stack)
-
-        # Save simple metadata as YAML
-        metadata = {
-            "start_frame": start_frame,
-            "end_frame": end_frame,
-            "channels": channel_names,
-            "pattern_bbox": pattern_bbox
-        }
-
-        with open(yaml_output_path, "w") as f:
-            yaml.safe_dump(metadata, f, sort_keys=False)
-
-        logger.info(
-            f"Saved pattern {pattern_idx} frames from {start_frame} to {end_frame} to {npy_output_path}"
-        )
-
-    def _process_filter_results(
-        self, filter_results: dict, fov_idx: int, output_dir: Path, min_frames: int, max_gap: int = 6
-    ) -> None:
-        """Process filter results for a single view."""
-        # Refine results
-        filter_results = self._refine_filter_results(filter_results, min_frames, max_gap)
-
-        # Add head and tail frames
-        filter_results = self._add_head_tail(filter_results)
-
-        # Load view and patterns
+    def _process_fov(
+        self,
+        fov_idx: int,
+        n_cells: int,
+        tolerance_gap: int,
+        min_frames: int,
+    ) -> int:
+        """Process a single FOV and extract valid sequences.
+        
+        Returns
+        -------
+        int
+            Number of sequences extracted
+        """
+        logger.info(f"Processing FOV {fov_idx}")
+        
+        # Load bounding boxes
+        try:
+            fov_bbox_data = get_fov_bounding_boxes(self.h5_path, fov_idx)
+        except Exception as e:
+            logger.warning(f"Could not load bounding boxes for FOV {fov_idx}: {e}")
+            return 0
+        
+        if not fov_bbox_data['patterns']:
+            logger.warning(f"No patterns in FOV {fov_idx}")
+            return 0
+        
+        # Load analysis data
+        try:
+            analysis_data = get_analysis_for_fov(self.h5_path, fov_idx)
+        except Exception as e:
+            logger.warning(f"Could not load analysis for FOV {fov_idx}: {e}")
+            return 0
+        
+        if not analysis_data:
+            logger.warning(f"No analysis data for FOV {fov_idx}")
+            return 0
+        
+        # Set up cropper
         self.cropper.load_fov(fov_idx)
+        
+        bounding_boxes = []
+        for pattern in sorted(fov_bbox_data['patterns'], key=lambda p: p['pattern_id']):
+            bbox = pattern['bbox']
+            bounding_boxes.append((bbox['x'], bbox['y'], bbox['width'], bbox['height']))
+        
+        self.cropper.bounding_boxes = bounding_boxes
+        self.cropper.n_patterns = len(bounding_boxes)
+        
+        # Load patterns for extraction
         self.cropper.load_patterns()
         self.cropper.process_patterns()
-
-        # Create FOV directory
-        fov_dir = output_dir / f"fov_{fov_idx:03d}"
-        fov_dir.mkdir(parents=True, exist_ok=True)
-
+        
+        total_frames = self.cropper.n_frames
+        sequences_extracted = 0
+        
         # Process each pattern
-        for pattern_sequence_idx, (start_frame, end_frame) in filter_results.items():
-            # Extract original pattern index and sequence number
-            pattern_idx = pattern_sequence_idx // 1000
-            sequence_idx = pattern_sequence_idx % 1000
-
-            # Filenames
-            filename_prefix = f"fov_{fov_idx:03d}_pattern_{pattern_idx:03d}_seq_{sequence_idx:03d}"
-            npy_output_path = fov_dir / f"{filename_prefix}.npy"
-            yaml_output_path = fov_dir / f"{filename_prefix}.yaml"
-
-            try:
-                self._extract_frame_stack(
-                    pattern_idx=pattern_idx,
-                    start_frame=start_frame,
-                    end_frame=end_frame,
-                    npy_output_path=npy_output_path,
-                    yaml_output_path=yaml_output_path,
-                )
-
-            except Exception as e:
-                logger.warning(f"Error processing pattern {pattern_idx}: {e}")
+        for pattern_idx, cell_counts in analysis_data.items():
+            sequences = self._find_valid_sequences(
+                cell_counts, n_cells, tolerance_gap, min_frames, total_frames
+            )
+            
+            if not sequences:
                 continue
+            
+            logger.info(f"FOV {fov_idx}, Pattern {pattern_idx}: {len(sequences)} valid sequences")
+            
+            for seq_idx, start_frame, end_frame in sequences:
+                # Add head/tail frames
+                ext_start, ext_end = self._add_head_tail(start_frame, end_frame, total_frames)
+                
+                try:
+                    # Extract data
+                    data = self._extract_sequence(fov_idx, pattern_idx, seq_idx, ext_start, ext_end)
+                    
+                    # Get channel names
+                    n_cell_channels = data.shape[1] - 2  # subtract pattern and segmentation
+                    channel_names = self._get_channel_names(n_cell_channels)
+                    
+                    # Prepare metadata
+                    bbox = bounding_boxes[pattern_idx] if pattern_idx < len(bounding_boxes) else None
+                    metadata = {
+                        'start_frame': ext_start,
+                        'end_frame': ext_end,
+                        'channels': channel_names,
+                        'bbox': bbox
+                    }
+                    
+                    # Save to H5
+                    append_extracted_sequence(
+                        self.h5_path, fov_idx, pattern_idx, seq_idx, data, metadata
+                    )
+                    
+                    sequences_extracted += 1
+                    logger.debug(
+                        f"Extracted FOV {fov_idx}, Pattern {pattern_idx}, Seq {seq_idx}: "
+                        f"frames {ext_start}-{ext_end}"
+                    )
+                    
+                except Exception as e:
+                    logger.warning(
+                        f"Error extracting FOV {fov_idx}, Pattern {pattern_idx}, Seq {seq_idx}: {e}"
+                    )
+                    continue
+        
+        return sequences_extracted
 
     # Public Methods
 
-    def extract(self, filter_results_dir: str, min_frames: int = 20, max_gap: int = 6) -> None:
-        """Extract valid frames and patterns from filtering results."""
-        try:
-            # Create base output directory
-            output_dir = Path(self.output_folder)
-            output_dir.mkdir(parents=True, exist_ok=True)
-
-            # Find all filter YAML files in FOV directories
-            yaml_files = sorted(list(Path(filter_results_dir).glob("fov_*/fov_*_filter.yaml")))
-
-            if not yaml_files:
-                raise ValueError(
-                    f"No fov_*_filter.yaml files found in {filter_results_dir}"
-                )
-
-            logger.info(f"Found {len(yaml_files)} filter files")
-
-            # Process each filter file
-            for yaml_file in yaml_files:
-                try:
-                    with open(yaml_file, "r") as f:
-                        data = yaml.safe_load(f)
-                    filter_results = {
-                        int(pattern_idx): frames
-                        for pattern_idx, frames in data["filter_results"].items()
-                    }
-                    # Extract view index from file path (fov_XXX_filter.yaml)
-                    fov_idx = int(yaml_file.stem.split("_")[1])
-                    logger.info(f"Processing filter results for fov {fov_idx}")
-                    self._process_filter_results(
-                        filter_results, fov_idx, output_dir, min_frames, max_gap
-                    )
-                except Exception as e:
-                    logger.error(f"Error processing {yaml_file}: {e}")
-                    raise ValueError(f"Error processing {yaml_file}: {e}")
-
-        except Exception as e:
-            logger.error(f"Error during extraction: {e}")
-            raise ValueError(f"Error during extraction: {e}")
+    def extract(
+        self,
+        n_cells: int,
+        tolerance_gap: int,
+        min_frames: int,
+    ) -> Dict[str, Any]:
+        """Extract sequences from all analyzed FOVs based on cell count criteria.
+        
+        Parameters
+        ----------
+        n_cells : int
+            Target number of cells per pattern
+        tolerance_gap : int
+            Max consecutive frames with wrong cell count allowed within a sequence
+        min_frames : int
+            Minimum sequence length
+            
+        Returns
+        -------
+        dict
+            Summary of extraction results
+        """
+        logger.info(f"Starting extraction: n_cells={n_cells}, tolerance_gap={tolerance_gap}, min_frames={min_frames}")
+        
+        # Get FOVs that have analysis data
+        processed_fovs = self.analysis_metadata.get('processed_fovs', [])
+        
+        if not processed_fovs:
+            logger.warning("No FOVs with analysis data found")
+            return {'total_sequences': 0, 'fovs_processed': 0}
+        
+        total_sequences = 0
+        fovs_with_sequences = []
+        
+        for fov_idx in processed_fovs:
+            try:
+                n_sequences = self._process_fov(fov_idx, n_cells, tolerance_gap, min_frames)
+                total_sequences += n_sequences
+                
+                if n_sequences > 0:
+                    fovs_with_sequences.append(fov_idx)
+                    
+            except Exception as e:
+                logger.error(f"Error processing FOV {fov_idx}: {e}")
+                continue
+        
+        # Finalize metadata
+        finalize_extracted_metadata(self.h5_path, {
+            'n_cells': n_cells,
+            'tolerance_gap': tolerance_gap,
+            'min_frames': min_frames,
+            'cells_path': self.cells_path,
+        })
+        
+        # Close files
+        self.cropper.close_files()
+        
+        summary = {
+            'total_sequences': total_sequences,
+            'fovs_processed': len(processed_fovs),
+            'fovs_with_sequences': fovs_with_sequences,
+            'h5_path': self.h5_path,
+        }
+        
+        logger.info(f"Extraction complete: {total_sequences} sequences from {len(fovs_with_sequences)} FOVs")
+        
+        return summary

@@ -5,7 +5,6 @@ from PySide6.QtWidgets import (QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
                              QStatusBar, QComboBox, QGroupBox, QSplitter)
 from PySide6.QtCore import Qt, QTimer
 import os
-import json
 import yaml
 import matplotlib
 import numpy as np
@@ -558,18 +557,18 @@ class MainWindow(QMainWindow):
         )
         
     def _get_interval_path(self):
-        """Get the path to the interval JSON file"""
+        """Get the path to the interval YAML file"""
         if self.file_path is None:
             return None
-        return os.path.splitext(self.file_path)[0] + '_interval.json'
+        return os.path.splitext(self.file_path)[0] + '_interval.yaml'
         
     def _load_interval(self):
-        """Load interval from JSON file"""
+        """Load interval from YAML file"""
         try:
             interval_file = self._get_interval_path()
             if interval_file and os.path.exists(interval_file):
                 with open(interval_file, 'r') as f:
-                    data = json.load(f)
+                    data = yaml.safe_load(f) or {}
                     self.start_frame = data.get('start_frame')
                     self.end_frame = data.get('end_frame')
                     if self.start_frame is not None and self.end_frame is not None:
@@ -579,7 +578,7 @@ class MainWindow(QMainWindow):
             self.statusBar.showMessage(f"Error loading interval: {str(e)}")
             
     def _save_interval_to_file(self):
-        """Save interval to JSON file"""
+        """Save interval to YAML file"""
         try:
             if self.start_frame is not None and self.end_frame is not None:
                 # Ensure start < end
@@ -590,11 +589,12 @@ class MainWindow(QMainWindow):
                 
                 interval_file = self._get_interval_path()
                 if interval_file:
+                    data = {
+                        'start_frame': self.start_frame,
+                        'end_frame': self.end_frame
+                    }
                     with open(interval_file, 'w') as f:
-                        json.dump({
-                            'start_frame': self.start_frame,
-                            'end_frame': self.end_frame
-                        }, f, indent=4)
+                        yaml.safe_dump(data, f, sort_keys=False)
                     self.statusBar.showMessage(f"Interval set: {self.start_frame + 1} - {self.end_frame + 1}")
         except Exception as e:
             self.statusBar.showMessage(f"Error saving interval: {str(e)}")

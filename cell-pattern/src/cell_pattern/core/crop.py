@@ -1,5 +1,5 @@
 """
-Core cell cropper functionality for cell-filter.
+Core cell cropper functionality for cell-pattern.
 """
 
 import cv2
@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
 import logging
-from cell_filter.utils import load_nd2, get_nd2_frame, get_nd2_channel_stack
+from cell_pattern.utils import load_nd2, get_nd2_frame, get_nd2_channel_stack
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -33,19 +33,17 @@ class Cropper:
     # Constructor
 
     def __init__(
-        self, patterns_path: str | None, cells_path: str, parameters: CropperParameters
+        self, patterns_path: str, cells_path: str, parameters: CropperParameters
     ) -> None:
         """Initialize Cropper and set paths."""
-        self.patterns_path = Path(patterns_path).resolve() if patterns_path is not None else None
+        self.patterns_path = Path(patterns_path).resolve()
         self.cells_path = Path(cells_path).resolve()
         self.parameters = parameters
 
         try:
-            if self.patterns_path is not None:
-                self._init_patterns()
+            self._init_patterns()
             self._init_cells()
-            if self.patterns_path is not None:
-                self._validate_files()
+            self._validate_files()
             logger.debug(
                 f"Successfully initialized Cropper with patterns: {self.patterns_path} and cells: {self.cells_path}"
             )
@@ -102,16 +100,14 @@ class Cropper:
 
     def _validate_files(self) -> None:
         """Validate the ND2 files meet the required specifications."""
-        if self.patterns_path is not None:
-            if self.pattern_n_channels != 1:
-                raise ValueError("Patterns ND2 file should have exactly 1 channel")
-            if self.pattern_n_frames != 1:
-                raise ValueError("Patterns ND2 file must contain exactly 1 frame")
-            if self.pattern_n_fovs != self.cells_n_fovs:
-                raise ValueError(
-                    "Patterns and cells ND2 files must contain the same number of views"
-                )
-        
+        if self.pattern_n_channels != 1:
+            raise ValueError("Patterns ND2 file should have exactly 1 channel")
+        if self.pattern_n_frames != 1:
+            raise ValueError("Patterns ND2 file must contain exactly 1 frame")
+        if self.pattern_n_fovs != self.cells_n_fovs:
+            raise ValueError(
+                "Patterns and cells ND2 files must contain the same number of views"
+            )
         if self.cells_n_channels < 2:
             raise ValueError("Cells ND2 file must contain at least 2 channels")
 
@@ -190,78 +186,6 @@ class Cropper:
         )
         return list(contours), thresh
 
-    # ----------------------------------------------------------------------
-    # Legacy method – kept for backward compatibility but no longer used.
-    # ----------------------------------------------------------------------
-    # def _refine_contours(
-    #     self, contours: list[np.ndarray], image_shape: tuple[int, int]
-    # ) -> list[tuple[int, int, np.ndarray, tuple[int, int, int, int]]]:
-    #     """
-    #     (Legacy) Refine contours by filtering based on area and calculating centers.
-    #     This method is retained only to avoid breaking external imports.
-    #     New code should use `_filter_contours_by_area` and `_contours_to_geometry`.
-    #     """
-    #     # The original implementation is preserved verbatim for compatibility.
-    #     if not contours:
-    #         raise ValueError("No contours provided")
-
-    #     areas = np.array([cv2.contourArea(contour) for contour in contours])
-
-    #     current_contours = list(contours)
-    #     current_areas = areas.copy()
-    #     iteration = 0
-    #     cv = float("inf")
-
-    #     for iteration in range(self.parameters.max_iterations):
-    #         cv = np.std(current_areas) / np.mean(current_areas)
-    #         if cv < self.parameters.bimodal_threshold:
-    #             break
-
-    #         mean_area = np.mean(current_areas)
-    #         min_area = self.parameters.min_area_ratio * mean_area
-    #         max_area = self.parameters.max_area_ratio * mean_area
-
-    #         new_contours = []
-    #         new_areas = []
-    #         for i, (contour, area) in enumerate(zip(current_contours, current_areas)):
-    #             if min_area <= area <= max_area:
-    #                 new_contours.append(contour)
-    #                 new_areas.append(area)
-
-    #         current_contours = new_contours
-    #         current_areas = np.array(new_areas)
-
-    #         if len(current_contours) == 0:
-    #             logger.warning("All contours were removed during iterative filtering")
-    #             break
-
-    #     logger.debug(f"After {iteration + 1} iterations, CV reduced to {cv:.3f}")
-
-    #     contour_data = []
-    #     for contour in current_contours:
-    #         x, y, w, h = cv2.boundingRect(contour)
-
-    #         if (
-    #             x < self.parameters.edge_tolerance
-    #             or y < self.parameters.edge_tolerance
-    #             or x + w > image_shape[1] - self.parameters.edge_tolerance
-    #             or y + h > image_shape[0] - self.parameters.edge_tolerance
-    #         ):
-    #             continue
-
-    #         center_x = x + w // 2
-    #         center_y = y // h // 2 if False else y + h // 2  # keep original logic
-    #         contour_data.append((center_y, center_x, contour, (x, y, w, h)))
-
-    #     contour_data.sort(key=lambda x: (x[0], x[1]))
-    #     logger.debug(
-    #         f"Filtered {len(contours)} contours to {len(contour_data)} using iterative area analysis"
-    #     )
-    #     return contour_data
-
-    # ----------------------------------------------------------------------
-    # New helper: filter contours by area statistics
-    # ----------------------------------------------------------------------
     def _filter_contours_by_area(self, contours: list[np.ndarray]) -> list[np.ndarray]:
         """
         Iteratively filter a list of contours based on their area distribution.
@@ -308,9 +232,6 @@ class Cropper:
         logger.debug(f"After {iteration + 1} iterations, CV reduced to {cv:.3f}")
         return current_contours
 
-    # ----------------------------------------------------------------------
-    # New helper: convert contours into centre coordinates and bounding boxes
-    # ----------------------------------------------------------------------
     def _contours_to_geometry(
         self, contours: list[np.ndarray], image_shape: tuple[int, int]
     ) -> tuple[list[tuple[int, int]], list[tuple[int, int, int, int]]]:
@@ -339,6 +260,23 @@ class Cropper:
             f"Converted {len(contours)} contours to {len(centers)} geometry entries"
         )
         return centers, bboxes
+
+    def _filter_by_edge_tolerance(
+        self, contours: list[np.ndarray], image_shape: tuple[int, int]
+    ) -> list[np.ndarray]:
+        """Remove contours whose bounding boxes intersect the edge tolerance margin."""
+        kept: list[np.ndarray] = []
+        for contour in contours:
+            x, y, w, h = cv2.boundingRect(contour)
+            if (
+                x < self.parameters.edge_tolerance
+                or y < self.parameters.edge_tolerance
+                or x + w > image_shape[1] - self.parameters.edge_tolerance
+                or y + h > image_shape[0] - self.parameters.edge_tolerance
+            ):
+                continue
+            kept.append(contour)
+        return kept
 
     def _extract_region(
         self, frame: np.ndarray, pattern_idx: int, normalize: bool
@@ -433,23 +371,6 @@ class Cropper:
             logger.error(f"Error loading cell: {e}")
             raise ValueError(f"Error loading cell: {e}")
 
-    def _filter_by_edge_tolerance(
-        self, contours: list[np.ndarray], image_shape: tuple[int, int]
-    ) -> list[np.ndarray]:
-        """Remove contours whose bounding boxes intersect the edge tolerance margin."""
-        kept: list[np.ndarray] = []
-        for contour in contours:
-            x, y, w, h = cv2.boundingRect(contour)
-            if (
-                x < self.parameters.edge_tolerance
-                or y < self.parameters.edge_tolerance
-                or x + w > image_shape[1] - self.parameters.edge_tolerance
-                or y + h > image_shape[0] - self.parameters.edge_tolerance
-            ):
-                continue
-            kept.append(contour)
-        return kept
-
     def process_patterns(self) -> None:
         """Process pattern image to extract contours and their bounding boxes."""
         if self.patterns is None:
@@ -461,11 +382,11 @@ class Cropper:
         # Detect raw contours from the normalised image
         contours, self.thresh = self._find_contours(self.patterns_norm)
 
-        # # 1️⃣ Filter contours by area statistics
-        # contours = self._filter_contours_by_area(contours)
+        # 1️⃣ Filter contours by area statistics
+        contours = self._filter_contours_by_area(contours)
 
-        # # 2️⃣ Apply edge‑tolerance filter
-        # contours = self._filter_by_edge_tolerance(contours, self.patterns_norm.shape)
+        # 2️⃣ Apply edge‑tolerance filter
+        contours = self._filter_by_edge_tolerance(contours, self.patterns_norm.shape)
 
         # 3️⃣ Convert to centres and bounding boxes
         self.centers, self.bounding_boxes = self._contours_to_geometry(

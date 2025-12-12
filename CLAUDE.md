@@ -19,11 +19,10 @@ This is a multi-package repository with three Python packages. Run commands from
   - `python -m pytest tests/test_specific.py::test_function -v`
 
 ### Module Entry Points
-- **cell-viewer**: `cell-viewer` or `python -m cell_viewer`
-- **cell-filter pattern**: `cell-filter-pattern` or `python -m cell_filter.pattern`
-- **cell-filter filter**: `cell-filter-filter` or `python -m cell_filter.filter`
-- **cell-filter extract**: `cell-filter-extract` or `python -m cell_filter.extract`
-- **cell-grapher**: `cell-grapher --input xxx.npy --output ./output` or `python -m cell_grapher --input xxx.npy --output ./output`
+- **cell-pattern**: `cell-pattern detect` or `cell-pattern extract`
+- **cell-filter**: `cell-filter analysis` or `cell-filter extract`
+- **cell-grapher**: `cell-grapher --input xxx.npy --output ./output`
+- **cell-viewer**: `cell-viewer`
 
 ## Code Style Guidelines
 
@@ -74,12 +73,36 @@ from cell_filter.core import Cropper, CropperParameters
 
 ## Data Format Specifications
 
-### Cell-Filter Output Format
-The cell-filter project outputs NPY files with the following structure:
-- **Shape**: `(n_frames, n_channels+2, height, width)`
-- **Channels**: `[pattern, cell_channels..., segmentation]`
-- **Data Type**: Preserves original ND2 data type
-- **Segmentation**: Cellpose-based with local cell IDs (background=0, cells=1,2,3,...)
+### Pipeline H5 File Structure
+The pipeline uses a single cumulative H5 file that grows through three stages:
+
+**Stage 1: cell-pattern extract** - Bounding boxes
+```
+/bounding_boxes/
+  fov_index, pattern_id, bbox_x, bbox_y, bbox_width, bbox_height,
+  center_x, center_y, area, patterns_path, cells_path, image_height, image_width
+/metadata/
+  total_fovs, total_patterns, processed_fovs, creation_time
+  fov_000/, fov_001/... (per-FOV attrs)
+```
+
+**Stage 2: cell-filter analysis** - Cell counts
+```
+/analysis/
+  fov_index, pattern_id, frame_index, cell_count (all int32 arrays)
+/analysis/metadata/
+  cells_path, nuclei_channel, min_size, processed_fovs, creation_time
+```
+
+**Stage 3: cell-filter extract** - Cropped sequences
+```
+/extracted/
+  fov_{idx}/pattern_{idx}/seq_{idx}/
+    data (n_frames, n_channels+2, h, w)
+    channels (list of channel names)
+    start_frame, end_frame, bbox_x, bbox_y, bbox_width, bbox_height (attrs)
+/extracted attrs: n_cells, tolerance_gap, min_frames, cells_path, creation_time
+```
 
 ### Cell-Grapher Input Requirements
 - Cell-filter NPY file with segmentation channel (last channel)

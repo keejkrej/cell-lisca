@@ -1,96 +1,83 @@
 """Unified entry point for cell-filter submodules."""
 
 import logging
-from typing import Optional
 
 import typer
 
-app = typer.Typer(help="Cell-filter: Process micropatterned timelapse microscopy images")
+app = typer.Typer(help="Cell-filter: Analyze and extract micropatterned timelapse microscopy data\n\nNote: Pattern detection is handled by the separate cell-pattern package.")
+
+
+def parse_range(range_str: str) -> tuple[int, int]:
+    """Parse a range string like '0:10' into (start, end) tuple."""
+    parts = range_str.split(':')
+    if len(parts) != 2:
+        raise typer.BadParameter(f"Range must be in format 'start:end', got '{range_str}'")
+    try:
+        start = int(parts[0])
+        end = int(parts[1])
+        return start, end
+    except ValueError:
+        raise typer.BadParameter(f"Range values must be integers, got '{range_str}'")
 
 
 @app.command()
-def pattern(
-    patterns: str = typer.Option("data/20250806_patterns_after.nd2", "--patterns"),
-    cells: str = typer.Option("data/20250806_MDCK_timelapse_crop_fov0004.nd2", "--cells"),
-    nuclei_channel: int = typer.Option(1, "--nuclei-channel"),
-    fov: int = typer.Option(0, "--fov"),
-    fov_all: bool = typer.Option(False, "--fov-all"),
-    output: Optional[str] = typer.Option(None, "--output"),
-    debug: bool = typer.Option(False, "--debug"),
+def analysis(
+    cells: str = typer.Option(..., "--cells", help="Path to cells ND2 file"),
+    h5: str = typer.Option(..., "--h5", help="Path to H5 file with bounding boxes (analysis will be appended)"),
+    nuclei_channel: int = typer.Option(1, "--nuclei-channel", help="Channel index for nuclei"),
+    range_str: str = typer.Option(..., "--range", help="FOV range to process (e.g., '0:10')"),
+    min_size: int = typer.Option(15, "--min-size", help="Minimum object size for nuclei detection"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ):
-    """Detect and annotate micropatterns."""
+    """Analyze cell counts for all patterns across all frames.
+    
+    Counts cells in each pattern for every frame in the specified FOV range.
+    Results are appended to the H5 file for later processing by the extract command.
+    FOVs not found in the H5 bounding boxes will be skipped with a warning.
+    """
     # Configure logging
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(
         level=log_level, format="%(levelname)s - %(name)s - %(message)s"
     )
     
-    from cell_filter.pattern import Patterner
+    # Parse range
+    start_fov, end_fov = parse_range(range_str)
     
-    patterner = Patterner(
-        patterns_path=patterns,
+    from cell_filter.analysis import Analyzer
+    
+    analyzer = Analyzer(
         cells_path=cells,
+        h5_path=h5,
         nuclei_channel=nuclei_channel,
     )
-    if fov_all:
-        for fov_idx in range(patterner.n_fovs):
-            patterner.plot_view(fov_idx, output)
-    else:
-        patterner.plot_view(fov, output)
-    patterner.close()
-
-
-@app.command()
-def filter(
-    patterns: str = typer.Option("data/20250806_patterns_after.nd2", "--patterns"),
-    cells: str = typer.Option("data/20250806_MDCK_timelapse_crop_fov0004.nd2", "--cells"),
-    nuclei_channel: int = typer.Option(1, "--nuclei-channel"),
-    output: str = typer.Option("data/analysis/", "--output"),
-    n_cells: int = typer.Option(4, "--n-cells"),
-    debug: bool = typer.Option(False, "--debug"),
-    all: bool = typer.Option(False, "--all"),
-    range: str = typer.Option("0:1", "--range"),
-    min_size: int = typer.Option(15, "--min-size"),
-):
-    """Filter patterns based on cell count."""
-    # Configure logging
-    log_level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(
-        level=log_level, format="%(levelname)s - %(name)s - %(message)s"
+    
+    summary = analyzer.analyze(
+        start_fov=start_fov,
+        end_fov=end_fov,
+        min_size=min_size
     )
     
-    from cell_filter.filter import Filterer
-    
-    filter_processor = Filterer(
-        patterns_path=patterns,
-        cells_path=cells,
-        output_folder=output,
-        n_cells=n_cells,
-        nuclei_channel=nuclei_channel,
-    )
-    if all:
-        filter_processor.process_fovs(
-            0, filter_processor.cropper.n_fovs - 1, min_size=min_size
-        )
-    else:
-        fov_range = list(map(int, range.split(":")))
-        filter_processor.process_fovs(
-            fov_range[0], fov_range[1], min_size=min_size
-        )
+    typer.echo(f"Analysis complete: {summary['total_records']} records from {len(summary['processed_fovs'])} FOVs")
+    if summary['skipped_fovs']:
+        typer.echo(f"Skipped FOVs (not in H5): {summary['skipped_fovs']}")
 
 
 @app.command()
 def extract(
-    patterns: str = typer.Option("data/20250806_patterns_after.nd2", "--patterns"),
-    cells: str = typer.Option("data/20250806_MDCK_timelapse_crop_fov0004.nd2", "--cells"),
-    nuclei_channel: int = typer.Option(1, "--nuclei-channel"),
-    filter_results: str = typer.Option("data/analysis/", "--filter-results"),
-    output: str = typer.Option("data/analysis/", "--output"),
-    min_frames: int = typer.Option(20, "--min-frames"),
-    max_gap: int = typer.Option(6, "--max-gap", help="Maximum frame gap before splitting sequences"),
-    debug: bool = typer.Option(False, "--debug"),
+    cells: str = typer.Option(..., "--cells", help="Path to cells ND2 file"),
+    h5: str = typer.Option(..., "--h5", help="Path to H5 file with bounding boxes and analysis data"),
+    nuclei_channel: int = typer.Option(1, "--nuclei-channel", help="Channel index for nuclei"),
+    n_cells: int = typer.Option(4, "--n-cells", help="Target number of cells per pattern"),
+    tolerance_gap: int = typer.Option(6, "--tolerance-gap", help="Max consecutive frames with wrong cell count"),
+    min_frames: int = typer.Option(20, "--min-frames", help="Minimum frames for valid sequences"),
+    debug: bool = typer.Option(False, "--debug", help="Enable debug logging"),
 ):
-    """Extract sequences from filtered patterns."""
+    """Extract sequences from analysis results based on cell count criteria.
+    
+    Reads analysis data from H5, finds sequences matching the cell count criteria,
+    and extracts cropped image data with segmentation to the same H5 file.
+    """
     # Configure logging
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
@@ -98,16 +85,18 @@ def extract(
     from cell_filter.extract import Extractor
     
     extractor = Extractor(
-        patterns_path=patterns,
         cells_path=cells,
-        output_folder=output,
+        h5_path=h5,
         nuclei_channel=nuclei_channel,
     )
-    extractor.extract(
-        filter_results_dir=filter_results,
-        min_frames=min_frames,
-        max_gap=max_gap
+    
+    summary = extractor.extract(
+        n_cells=n_cells,
+        tolerance_gap=tolerance_gap,
+        min_frames=min_frames
     )
+    
+    typer.echo(f"Extraction complete: {summary['total_sequences']} sequences extracted")
 
 
 def main():

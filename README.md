@@ -4,19 +4,22 @@ A comprehensive toolkit for analyzing micropatterned timelapse microscopy images
 
 ## Overview
 
-cell-lisca is a multi-package Python workspace that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of three integrated applications that work together to provide a complete analysis pipeline:
+cell-lisca is a multi-package Python workspace that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of four integrated applications that work together to provide a complete analysis pipeline:
 
-1. **cell-filter**: Pattern detection, cell counting, and data extraction with segmentation
-2. **cell-grapher**: Cell tracking, region adjacency graph construction, and T1 transition analysis
-3. **cell-viewer**: Interactive visualization and frame selection for microscopy data
+1. **cell-pattern**: Pattern detection and annotation for micropatterned microscopy images
+2. **cell-filter**: Cell counting, filtering, and data extraction with segmentation
+3. **cell-grapher**: Cell tracking, region adjacency graph construction, and T1 transition analysis
+4. **cell-tensionmap**: Integration with TensionMap for stress tensor inference
+5. **cell-viewer**: Interactive visualization and frame selection for microscopy data
 
 ## Features
 
-- **Pattern Detection**: Automatically identify and annotate micropatterns in microscopy images
-- **Cell Segmentation**: Advanced cell segmentation using Cellpose
-- **Cell Tracking**: Track cells across timeframes with IoU-based alignment
-- **Topological Analysis**: Analyze T1 transitions and cellular rearrangements
-- **Interactive Visualization**: User-friendly interface for data exploration
+- **Pattern Detection**: Automatically identify and annotate micropatterns in microscopy images (cell-pattern)
+- **Cell Segmentation**: Advanced cell segmentation using Cellpose (cell-filter)
+- **Cell Tracking**: Track cells across timeframes with IoU-based alignment (cell-grapher)
+- **Topological Analysis**: Analyze T1 transitions and cellular rearrangements (cell-grapher)
+- **Tension Inference**: Calculate cellular stress tensors using VMSI (cell-tensionmap)
+- **Interactive Visualization**: User-friendly interface for data exploration (cell-viewer)
 - **Data Export**: Multiple output formats for downstream analysis
 
 ## Installation
@@ -44,11 +47,17 @@ uv sync
 3. Install individual packages (if needed):
 
 ```bash
+# Install cell-pattern
+cd cell-pattern && uv sync
+
 # Install cell-filter
 cd cell-filter && uv sync
 
 # Install cell-grapher
 cd cell-grapher && uv sync
+
+# Install cell-tensionmap
+cd cell-tensionmap && uv sync
 
 # Install cell-viewer
 cd cell-viewer && uv sync
@@ -98,8 +107,10 @@ pip install -e .
 To verify installation, run:
 
 ```bash
+# Test cell-pattern module
+cell-pattern --help
+
 # Test cell-filter modules
-cell-filter-pattern --help
 cell-filter-filter --help
 cell-filter-extract --help
 
@@ -112,10 +123,11 @@ cell-viewer
 ```
 
 **Note**: You can also use the `python -m` syntax if preferred:
-- `python -m cell_filter.pattern` instead of `cell-filter-pattern`
+- `python -m cell_pattern` instead of `cell-pattern`
 - `python -m cell_filter.filter` instead of `cell-filter-filter`
 - `python -m cell_filter.extract` instead of `cell-filter-extract`
 - `python -m cell_grapher` instead of `cell-grapher`
+- `python -m cell_tensionmap` instead of `cell-tensionmap`
 - `python -m cell_viewer` instead of `cell-viewer`
 
 ## Quick Start
@@ -125,7 +137,7 @@ cell-viewer
 1. **Pattern Detection**: Show/save a plot of the patterns marked with bounding boxes
 
 ```bash
-cell-filter-pattern \
+cell-pattern \
   --patterns /path/to/patterns.nd2 \
   --cells /path/to/cells.nd2 \
   --nuclei-channel 1 \
