@@ -1,4 +1,4 @@
-# CLAUDE.md - Development Guidelines for cell-lisca Repository
+# AGENTS.md - Development Guidelines for cell-lisca Repository
 
 This document contains development guidelines for contributors to the cell-lisca repository. For usage instructions, see the individual package USAGE.md files.
 

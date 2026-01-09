@@ -130,7 +130,25 @@ cell-viewer
 - `python -m cell_tensionmap` instead of `cell-tensionmap`
 - `python -m cell_viewer` instead of `cell-viewer`
 
-## Quick Start
+## Documentation
+
+Full documentation is available at: https://cell-lisca.readthedocs.io/
+
+The documentation includes:
+- **Installation Guide**: Detailed setup instructions
+- **Quick Start**: Step-by-step tutorial
+- **Module Documentation**: Detailed API reference for all modules
+- **Examples**: Practical examples and workflows
+- **Contributing Guide**: How to contribute to the project
+
+To build the documentation locally:
+
+```bash
+cd docs
+pip install -r requirements.txt
+make html
+# Open _build/html/index.html in your browser
+```
 
 ### Basic Workflow
 
