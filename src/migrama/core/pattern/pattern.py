@@ -7,8 +7,9 @@ import matplotlib.pyplot as plt
 import cv2
 import logging
 from pathlib import Path
-from . import Cropper, CropperParameters
-from .io.h5_io import save_bounding_boxes_hdf5
+from .crop import Cropper, CropperParameters
+from ..io.h5_io import save_bounding_boxes_hdf5
+from ..models.data_models import FOVData, Pattern, BoundingBox
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -157,46 +158,39 @@ class Patterner:
             if self.cropper.contours is None:
                 raise ValueError("No contours available")
 
-            # Extract pattern data
-            patterns_data = []
-            for pattern_idx in range(self.cropper.n_patterns):
-                bbox = self.cropper.bounding_boxes[pattern_idx]
-                center = self.cropper.centers[pattern_idx]
-                contour = self.cropper.contours[pattern_idx]
-                area = int(cv2.contourArea(contour))
-                
-                x, y, w, h = bbox
-                
-                pattern_data = {
-                    "pattern_id": pattern_idx,
-                    "bbox": {
-                        "x": int(x),
-                        "y": int(y), 
-                        "width": int(w),
-                        "height": int(h)
-                    },
-                    "center": {
-                        "x": int(center[1]),  # center_x
-                        "y": int(center[0])   # center_y
-                    },
-                    "area": area
-                }
-                patterns_data.append(pattern_data)
+            # Create Pattern objects
+            patterns = []
+            for pattern_idx, (x, y, w, h, area, center) in enumerate(zip(
+                self.cropper.bbox_x, self.cropper.bbox_y, 
+                self.cropper.bbox_w, self.cropper.bbox_h,
+                self.cropper.areas, self.cropper.centroids
+            )):
+                bbox = BoundingBox(
+                    x=int(x),
+                    y=int(y),
+                    width=int(w),
+                    height=int(h)
+                )
+                pattern = Pattern(
+                    pattern_id=pattern_idx,
+                    bbox=bbox,
+                    center=(int(center[1]), int(center[0])),  # (center_x, center_y)
+                    area=area
+                )
+                patterns.append(pattern)
 
-            # Create metadata
-            data = {
-                "patterns_path": str(self.cropper.patterns_path),
-                "cells_path": str(self.cropper.cells_path),
-                "fov_index": fov_idx,
-                "n_patterns": self.cropper.n_patterns,
-                "image_shape": list(self.cropper.thresh.shape) if self.cropper.thresh is not None else None,
-                "patterns": patterns_data,
-                "extraction_timestamp": logger.handlers[0].formatter.formatTime(logger.makeRecord(
-                    '', 0, '', 0, '', (), None
-                )) if logger.handlers else None
-            }
+            # Create FOVData object
+            from datetime import datetime
+            fov_data = FOVData(
+                fov_index=fov_idx,
+                patterns=patterns,
+                patterns_path=str(self.cropper.patterns_path),
+                cells_path=str(self.cropper.cells_path),
+                image_shape=list(self.cropper.thresh.shape) if self.cropper.thresh is not None else None,
+                extraction_timestamp=datetime.now().isoformat()
+            )
 
-            return data
+            return fov_data
 
         except Exception as e:
             logger.error(f"Error extracting bounding boxes for FOV {fov_idx}: {e}")
@@ -269,8 +263,8 @@ class Patterner:
                 fov_data = self.extract_bounding_boxes(fov_idx)
                 all_fovs_data[fov_idx] = fov_data
                 summary["processed_fovs"].append(fov_idx)
-                summary["total_patterns"] += fov_data["n_patterns"]
-                logger.debug(f"FOV {fov_idx}: {fov_data['n_patterns']} patterns")
+                summary["total_patterns"] += fov_data.n_patterns
+                logger.debug(f"FOV {fov_idx}: {fov_data.n_patterns} patterns")
                 
             except Exception as e:
                 logger.error(f"Failed to process FOV {fov_idx}: {e}")

@@ -1,6 +1,7 @@
 """I/O utilities for cell-lisca modules."""
 
 from .h5_io import *
+from .nikon import *
 
 __all__ = [
     "save_bounding_boxes_hdf5",
@@ -12,4 +13,8 @@ __all__ = [
     "get_analysis_for_fov",
     "append_extracted_sequence",
     "finalize_extracted_metadata",
+    "load_nd2",
+    "get_nd2_frame",
+    "get_nd2_channel_stack",
+    "ND2Metadata",
 ]
