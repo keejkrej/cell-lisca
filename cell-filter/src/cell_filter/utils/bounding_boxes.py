@@ -5,13 +5,8 @@ Utility functions for loading and working with bounding box data from cell-patte
 import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
-import sys
-import os
 
-# Add cell-pattern to path for importing h5_io utilities
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'cell-pattern', 'src'))
-
-from cell_pattern.utils.h5_io import (
+from cell_core.io.h5_io import (
     load_bounding_boxes_hdf5,
     get_fov_bounding_boxes,
     get_available_fovs,

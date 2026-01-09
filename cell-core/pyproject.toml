@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "cell-pattern"
+name = "cell-core"
 version = "0.1.0"
-description = "Pattern detection and annotation for micropatterned timelapse microscopy images"
+description = "Core utilities and interfaces for cell-lisca modules"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
@@ -13,23 +13,13 @@ authors = [
 ]
 dependencies = [
     "numpy",
-    "matplotlib",
-    "opencv-python",
-    "nd2",
-    "xarray",
-    "dask",
-    "scikit-image",
-    "scipy",
-    "typer",
     "h5py",
-    "cell-core",
+    "pydantic>=2.0.0",
+    "typer",
 ]
 
-[project.scripts]
-cell-pattern = "cell_pattern.main:app"
-
 [tool.hatch.build.targets.wheel]
-packages = ["src/cell_pattern"]
+packages = ["src/cell_core"]
 
 [dependency-groups]
 dev = [

@@ -10,13 +10,8 @@ from cell_filter.core import Cropper, CropperParameters, CellposeCounter
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
-import sys
-import os
 
-# Add cell-pattern to path for importing h5_io utilities
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'cell-pattern', 'src'))
-
-from cell_pattern.utils.h5_io import (
+from cell_core.io.h5_io import (
     get_available_fovs,
     get_fov_bounding_boxes,
     append_analysis_h5,

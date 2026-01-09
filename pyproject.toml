@@ -1,7 +1,8 @@
 [tool.uv.workspace]
-members = ["cell-tracker", "cell-viewer", "cell-filter", "cell-pattern", "cell-tensionmap"]
+members = ["cell-core", "cell-tracker", "cell-viewer", "cell-filter", "cell-pattern", "cell-tensionmap"]
 
 [tool.uv.sources]
+cell-core = { workspace = true }
 cell-tracker = { workspace = true }
 cell-viewer = { workspace = true }
 cell-filter = { workspace = true }

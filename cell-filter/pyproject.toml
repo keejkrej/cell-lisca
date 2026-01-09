@@ -27,6 +27,7 @@ dependencies = [
     "pyyaml",
     "typer",
     "h5py",
+    "cell-core",
 ]
 
 [project.scripts]
