@@ -192,9 +192,24 @@ cell-filter-extract \
 
 4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
 
+For NPY files (legacy):
 ```bash
-cell-grapher \
+cell-grapher analyze \
   --input ./output/fov_000_pattern_000_seq_000.npy \
+  --output ./analysis
+```
+
+For H5 files (recommended):
+```bash
+# List available sequences
+cell-grapher list-sequences --input ./output/bounding_boxes_all_fovs.h5
+
+# Analyze a specific sequence
+cell-grapher analyze \
+  --input ./output/bounding_boxes_all_fovs.h5 \
+  --fov 0 \
+  --pattern 0 \
+  --sequence 0 \
   --output ./analysis
 ```
 

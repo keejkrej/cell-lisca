@@ -21,7 +21,7 @@ This is a multi-package repository with three Python packages. Run commands from
 ### Module Entry Points
 - **cell-pattern**: `cell-pattern detect` or `cell-pattern extract`
 - **cell-filter**: `cell-filter analysis` or `cell-filter extract`
-- **cell-grapher**: `cell-grapher --input xxx.npy --output ./output`
+- **cell-grapher**: `cell-grapher analyze --input xxx.h5 --fov 0 --pattern 0 --sequence 0 --output ./output` or `cell-grapher list-sequences --input xxx.h5`
 - **cell-viewer**: `cell-viewer`
 
 ## Code Style Guidelines

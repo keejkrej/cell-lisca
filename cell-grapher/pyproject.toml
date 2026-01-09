@@ -21,6 +21,7 @@ dependencies = [
     "opencv-python",
     "btrack",
     "typer",
+    "cell-core",
 ]
 
 [project.scripts]
