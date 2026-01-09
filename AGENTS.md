@@ -60,6 +60,11 @@ from cell_filter.core import Cropper, CropperParameters
 - **Constants**: UPPER_SNAKE_CASE
 - **Private methods**: prefix with underscore (`_method_name`)
 
+### Documentation
+- **Location**: All documentation files must be placed in the `docs/` directory
+- **Formats**: Use Markdown (.md) for documentation
+- **Structure**: Follow the existing documentation structure in docs/
+
 ### Dependencies
 - **cell-viewer**: PySide6, numpy, matplotlib, pyyaml>=6.0.2
 - **cell-filter**: numpy, torch, matplotlib, opencv-python, cellpose>4, nd2, xarray, dask, scikit-image, scipy, tifffile, networkx, pyyaml
