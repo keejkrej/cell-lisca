@@ -1,0 +1,41 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cell-filter"
+version = "0.1.0"
+description = "Filtering micropatterned timelapse microscopy images based on number of cells"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Tianyi Cao", email = "ctyjackcao@outlook.com" }
+]
+dependencies = [
+    "numpy",
+    "torch",
+    "matplotlib",
+    "opencv-python",
+    "cellpose>4",
+    "nd2",
+    "xarray",
+    "dask",
+    "scikit-image",
+    "scipy",
+    "tifffile",
+    "networkx",
+    "pyyaml",
+    "typer",
+    "h5py",
+]
+
+[project.scripts]
+cell-filter = "cell_filter.main:app"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cell_filter"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.14.9",
+]

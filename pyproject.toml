@@ -1,0 +1,14 @@
+[tool.uv.workspace]
+members = ["cell-tracker", "cell-viewer", "cell-filter", "cell-pattern", "cell-tensionmap"]
+
+[tool.uv.sources]
+cell-tracker = { workspace = true }
+cell-viewer = { workspace = true }
+cell-filter = { workspace = true }
+cell-pattern = { path = "cell-pattern" }
+cell-tensionmap = { path = "cell-tensionmap" }
+
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1",
+]

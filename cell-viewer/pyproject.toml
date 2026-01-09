@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cell-viewer"
+version = "0.1.0"
+description = "A PySide6-based NPY viewer which allows user to set start and end frame and save the interval as a new NPY file"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Tianyi Cao", email = "ctyjackcao@outlook.com" }
+]
+dependencies = [
+    "PySide6",
+    "numpy",
+    "matplotlib",
+    "pyyaml>=6.0.2",
+]
+
+[project.scripts]
+cell-viewer = "cell_viewer.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/cell_viewer"]
