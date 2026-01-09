@@ -6,12 +6,12 @@ storing results in an H5 file for later processing by the extract stage.
 """
 
 import time
-from cell_core import Cropper, CropperParameters, CellposeCounter
+from ...core import Cropper, CropperParameters, CellposeCounter
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
 
-from cell_core.io.h5_io import (
+from ...core.io.h5_io import (
     get_available_fovs,
     get_fov_bounding_boxes,
     append_analysis_h5,

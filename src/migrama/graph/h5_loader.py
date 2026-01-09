@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 from pathlib import Path
 import logging
 
-from cell_core.io.h5_io import (
+from ..core.io.h5_io import (
     load_extracted_sequence,
     list_extracted_sequences,
 )

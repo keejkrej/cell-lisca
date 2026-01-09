@@ -1,25 +1,27 @@
-# Cell-LISCA: Live-cell Imaging of Self-organizing Cellular Arrays
+# Migrama: Live-cell Imaging of Self-organizing Cellular Arrays
 
 A comprehensive toolkit for analyzing micropatterned timelapse microscopy images, focusing on cell tracking, pattern recognition, and topological transitions in cellular arrays.
 
 ## Overview
 
-cell-lisca is a multi-package Python workspace that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of four integrated applications that work together to provide a complete analysis pipeline:
+Migrama is a monolithic Python package that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of seven integrated modules that work together to provide a complete analysis pipeline:
 
-1. **cell-pattern**: Pattern detection and annotation for micropatterned microscopy images
-2. **cell-filter**: Cell counting, filtering, and data extraction with segmentation
-3. **cell-grapher**: Cell tracking, region adjacency graph construction, and T1 transition analysis
-4. **cell-tensionmap**: Integration with TensionMap for stress tensor inference
-5. **cell-viewer**: Interactive visualization and frame selection for microscopy data
+1. **migrama.pattern**: Pattern detection and annotation for micropatterned microscopy images
+2. **migrama.filter**: Cell counting and analysis with segmentation
+3. **migrama.extract**: Extract cropped sequences based on cell count criteria
+4. **migrama.graph**: Cell tracking, region adjacency graph construction, and T1 transition analysis
+5. **migrama.tension**: Integration with TensionMap for stress tensor inference
+6. **migrama.viewer**: Interactive visualization and frame selection for microscopy data
+7. **migrama.core**: Shared utilities and interfaces used across all modules
 
 ## Features
 
-- **Pattern Detection**: Automatically identify and annotate micropatterns in microscopy images (cell-pattern)
-- **Cell Segmentation**: Advanced cell segmentation using Cellpose (cell-filter)
-- **Cell Tracking**: Track cells across timeframes with IoU-based alignment (cell-grapher)
-- **Topological Analysis**: Analyze T1 transitions and cellular rearrangements (cell-grapher)
-- **Tension Inference**: Calculate cellular stress tensors using VMSI (cell-tensionmap)
-- **Interactive Visualization**: User-friendly interface for data exploration (cell-viewer)
+- **Pattern Detection**: Automatically identify and annotate micropatterns in microscopy images (migrama.pattern)
+- **Cell Segmentation**: Advanced cell segmentation using Cellpose (migrama.filter)
+- **Cell Tracking**: Track cells across timeframes with IoU-based alignment (migrama.graph)
+- **Topological Analysis**: Analyze T1 transitions and cellular rearrangements (migrama.graph)
+- **Tension Inference**: Calculate cellular stress tensors using VMSI (migrama.tension)
+- **Interactive Visualization**: User-friendly interface for data exploration (migrama.viewer)
 - **Data Export**: Multiple output formats for downstream analysis
 
 ## Installation
@@ -35,100 +37,54 @@ cell-lisca is a multi-package Python workspace that provides specialized tools f
 
 ```bash
 git clone <repository-url>
-cd cell-lisca
+cd migrama
 ```
 
-2. Install all packages using uv:
+2. Install the package using uv:
 
 ```bash
 uv sync
 ```
 
-3. Install individual packages (if needed):
+The package will be installed in editable mode, and you can run it with:
 
 ```bash
-# Install cell-pattern
-cd cell-pattern && uv sync
-
-# Install cell-filter
-cd cell-filter && uv sync
-
-# Install cell-grapher
-cd cell-grapher && uv sync
-
-# Install cell-tensionmap
-cd cell-tensionmap && uv sync
-
-# Install cell-viewer
-cd cell-viewer && uv sync
+uv run migrama --help
 ```
 
-### Option 2: Installation with conda + pip
+### Option 2: Installation with pip
 
 1. Clone the repository:
 
 ```bash
 git clone <repository-url>
-cd cell-lisca
+cd migrama
 ```
 
-2. Create a new conda environment:
+2. Create a virtual environment:
 
 ```bash
-conda create -n cell-lisca python=3.11
-conda activate cell-lisca
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 ```
-
-3. Install each package:
-
-**Cell-filter:**
-
-```bash
-cd cell-filter
-pip install -e .
-```
-
-**Cell-grapher:**
-
-```bash
-cd ../cell-grapher
-pip install -e .
-```
-
-**Cell-viewer:**
-
-```bash
-cd ../cell-viewer
-pip install -e .
-```
+## Quick Start
 
 ### Verification
 
 To verify installation, run:
 
 ```bash
-# Test cell-pattern module
-cell-pattern --help
-
-# Test cell-filter modules
-cell-filter-filter --help
-cell-filter-extract --help
-
-# Test cell-grapher
-cell-grapher --help
-
-# Test cell-viewer
-cell-viewer
-# (should launch the GUI application)
+migrama --help
 ```
 
-**Note**: You can also use the `python -m` syntax if preferred:
-- `python -m cell_pattern` instead of `cell-pattern`
-- `python -m cell_filter.filter` instead of `cell-filter-filter`
-- `python -m cell_filter.extract` instead of `cell-filter-extract`
-- `python -m cell_grapher` instead of `cell-grapher`
-- `python -m cell_tensionmap` instead of `cell-tensionmap`
-- `python -m cell_viewer` instead of `cell-viewer`
+This will show all available subcommands:
+
+- `migrama pattern` - Pattern detection and annotation
+- `migrama filter` - Cell counting and analysis  
+- `migrama extract` - Extract cropped sequences
+- `migrama graph` - Cell tracking and graph analysis
+- `migrama tension` - Tension map analysis
+- `migrama viewer` - Launch interactive viewer
 
 ## Documentation
 
@@ -155,7 +111,7 @@ make html
 1. **Pattern Detection**: Show/save a plot of the patterns marked with bounding boxes
 
 ```bash
-cell-pattern \
+migrama pattern detect \
   --patterns /path/to/patterns.nd2 \
   --cells /path/to/cells.nd2 \
   --nuclei-channel 1 \
@@ -167,12 +123,10 @@ You will find `fov_000.png` in the output folder.
 2. **Cell Filtering**: Filter the timelapse based on number of cells
 
 ```bash
-cell-filter-filter \
-  --patterns /path/to/patterns.nd2 \
+migrama filter analysis \
   --cells /path/to/cells.nd2 \
+  --h5 ./bounding_boxes.h5 \
   --nuclei-channel 1 \
-  --n-cells 4 \
-  --output ./output/ \
   --range 0:1 \
   --min-size 30
 ```
@@ -180,21 +134,21 @@ cell-filter-filter \
 3. **Data Extraction**: Extract the timelapse of filtered cells
 
 ```bash
-cell-filter-extract \
-  --patterns /path/to/patterns.nd2 \
+migrama extract \
   --cells /path/to/cells.nd2 \
+  --h5 ./bounding_boxes.h5 \
   --nuclei-channel 1 \
-  --filter-results ./output/ \
+  --n-cells 4 \
   --output ./output/ \
   --min-frames 20 \
-  --max-gap 6
+  --tolerance-gap 6
 ```
 
 4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
 
 For NPY files (legacy):
 ```bash
-cell-grapher analyze \
+migrama graph analyze \
   --input ./output/fov_000_pattern_000_seq_000.npy \
   --output ./analysis
 ```
@@ -202,10 +156,10 @@ cell-grapher analyze \
 For H5 files (recommended):
 ```bash
 # List available sequences
-cell-grapher list-sequences --input ./output/bounding_boxes_all_fovs.h5
+migrama graph list-sequences --input ./output/bounding_boxes_all_fovs.h5
 
 # Analyze a specific sequence
-cell-grapher analyze \
+migrama graph analyze \
   --input ./output/bounding_boxes_all_fovs.h5 \
   --fov 0 \
   --pattern 0 \
@@ -216,31 +170,56 @@ cell-grapher analyze \
 5. **Visualization**: Interactively view and select frames
 
 ```bash
-cell-viewer
+migrama viewer
 # Then open files through the application's file menu
 ```
 
 ## Project Structure
 
 ```
-cell-lisca/
-├── cell-filter/          # Pattern detection and cell segmentation
-│   ├── src/cell_filter/
-│   │   ├── core/         # Core processing modules
-│   │   ├── extract/      # Data extraction with segmentation
-│   │   ├── filter/       # Cell counting and filtering
-│   │   ├── pattern/      # Pattern detection
-│   │   └── utils/        # Utility functions
-│   └── tests/            # Test files
-├── cell-grapher/         # Cell tracking and graph analysis
-│   ├── src/cell_grapher/
-│   │   ├── core/         # Graph processing modules
-│   │   └── ...           # Analysis and visualization modules
-│   └── tests/            # Test files
-└── cell-viewer/          # Interactive data viewer
-    ├── src/cell_viewer/
-    │   └── ui/           # User interface components
-    └── tests/            # Test files
+migrama/
+├── src/                 # Source code directory
+│   └── migrama/         # Main package directory
+│       ├── __init__.py  # Package initialization
+│       ├── cli/         # Command-line interface
+│       │   ├── __init__.py
+│       │   └── main.py  # Unified CLI entry point
+│       ├── core/        # Shared utilities and interfaces
+│       │   ├── __init__.py
+│       │   ├── io/      # I/O operations
+│       │   ├── models/  # Data models
+│       │   ├── interfaces/ # Pipeline interfaces
+│       │   ├── segmentation/ # Cell segmentation
+│       │   ├── pattern/ # Pattern detection utilities
+│       │   ├── tracking/ # Cell tracking
+│       │   └── network/ # Graph operations
+│       ├── pattern/     # Pattern detection module
+│       │   ├── __init__.py
+│       │   ├── main.py  # Pattern detection CLI
+│       │   └── utils/   # Pattern utilities
+│       ├── filter/      # Cell counting and analysis
+│       │   ├── __init__.py
+│       │   ├── main.py  # Filter CLI
+│       │   ├── analysis/ # Cell counting
+│       │   └── utils/   # Filter utilities
+│       ├── extract/     # Data extraction module
+│       │   ├── __init__.py
+│       │   └── core.py  # Extraction logic
+│       ├── graph/       # Cell tracking and graph analysis
+│       │   ├── __init__.py
+│       │   ├── main.py  # Graph CLI
+│       │   └── ...      # Graph analysis modules
+│       ├── tension/     # Tension map analysis
+│       │   ├── __init__.py
+│       │   ├── cli.py   # Tension CLI
+│       │   └── integration.py
+│       └── viewer/      # Interactive data viewer
+│           ├── __init__.py
+│           ├── main.py  # Viewer entry point
+│           └── ui/      # User interface components
+├── docs/                # Documentation
+├── pyproject.toml       # Project configuration
+└── README.md           # This file
 ```
 
 ## Dependencies

@@ -7,11 +7,11 @@ applying user-specified criteria and outputting to H5 format.
 
 from pathlib import Path
 import numpy as np
-from cell_core import Cropper, CropperParameters, CellposeSegmenter
+from ..core import Cropper, CropperParameters, CellposeSegmenter
 import logging
 from typing import Dict, List, Any, Tuple
 
-from cell_core.io.h5_io import (
+from ..core.io.h5_io import (
     get_fov_bounding_boxes,
     load_analysis_h5,
     get_analysis_for_fov,

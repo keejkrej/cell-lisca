@@ -1,28 +1,30 @@
-# AGENTS.md - Development Guidelines for cell-lisca Repository
+# AGENTS.md - Development Guidelines for migrama Repository
 
-This document contains development guidelines for contributors to the cell-lisca repository. For usage instructions, see the individual package USAGE.md files.
+This document contains development guidelines for contributors to the migrama repository. For usage instructions, see the documentation in the docs/ directory.
 
 ## Build/Lint/Test Commands
 
-This is a multi-package repository with three Python packages. Run commands from individual package directories.
+This is a monolithic Python package. Run commands from the repository root.
 
-### General Commands (run from package directories)
-- **Install**: `uv sync`
+### General Commands
+- **Install**: `uv sync` or `pip install -e .`
 - **Lint**: `ruff check --fix .`
 - **Type check**: No explicit typecheck command configured
 
 ### Testing
 - **Current Status**: No test files are currently implemented in the repository
-- **Future Testing**: When tests are added, they should be placed in `tests/` directories within each package
+- **Future Testing**: When tests are added, they should be placed in `tests/` directory in the repository root
 - **Test Commands** (for future use):
   - `python -m pytest tests/ -v`
   - `python -m pytest tests/test_specific.py::test_function -v`
 
 ### Module Entry Points
-- **cell-pattern**: `cell-pattern detect` or `cell-pattern extract`
-- **cell-filter**: `cell-filter analysis` or `cell-filter extract`
-- **cell-grapher**: `cell-grapher analyze --input xxx.h5 --fov 0 --pattern 0 --sequence 0 --output ./output` or `cell-grapher list-sequences --input xxx.h5`
-- **cell-viewer**: `cell-viewer`
+- **migrama pattern**: `migrama pattern detect` or `migrama pattern extract`
+- **migrama filter**: `migrama filter analysis`
+- **migrama extract**: `migrama extract`
+- **migrama graph**: `migrama graph analyze --input xxx.h5 --fov 0 --pattern 0 --sequence 0 --output ./output` or `migrama graph list-sequences --input xxx.h5`
+- **migrama tension**: `migrama tension run --mask xxx.npy`
+- **migrama viewer**: `migrama viewer`
 
 ## Code Style Guidelines
 
@@ -45,7 +47,7 @@ import matplotlib.pyplot as plt
 from cellpose import models
 
 # Local imports
-from cell_filter.core import Cropper, CropperParameters
+from migrama.core import Cropper, CropperParameters
 ```
 
 ### Class Structure
@@ -66,9 +68,7 @@ from cell_filter.core import Cropper, CropperParameters
 - **Structure**: Follow the existing documentation structure in docs/
 
 ### Dependencies
-- **cell-viewer**: PySide6, numpy, matplotlib, pyyaml>=6.0.2
-- **cell-filter**: numpy, torch, matplotlib, opencv-python, cellpose>4, nd2, xarray, dask, scikit-image, scipy, tifffile, networkx, pyyaml
-- **cell-grapher**: numpy, matplotlib, scikit-image, networkx, scipy, pyyaml, opencv-python, btrack
+- **migrama**: numpy, h5py, pydantic>=2.0.0, typer, cellpose>4, torch, torchvision, matplotlib, opencv-python, scikit-image, scipy, tifffile, networkx, btrack, nd2, xarray, dask, pyyaml>=6.0.2, PySide6
 
 ### Testing
 - **Current Status**: No test files are currently implemented
@@ -81,7 +81,7 @@ from cell_filter.core import Cropper, CropperParameters
 ### Pipeline H5 File Structure
 The pipeline uses a single cumulative H5 file that grows through three stages:
 
-**Stage 1: cell-pattern extract** - Bounding boxes
+**Stage 1: migrama pattern extract** - Bounding boxes
 ```
 /bounding_boxes/
   fov_index, pattern_id, bbox_x, bbox_y, bbox_width, bbox_height,
@@ -91,7 +91,7 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
   fov_000/, fov_001/... (per-FOV attrs)
 ```
 
-**Stage 2: cell-filter analysis** - Cell counts
+**Stage 2: migrama filter analysis** - Cell counts
 ```
 /analysis/
   fov_index, pattern_id, frame_index, cell_count (all int32 arrays)
@@ -99,7 +99,7 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
   cells_path, nuclei_channel, min_size, processed_fovs, creation_time
 ```
 
-**Stage 3: cell-filter extract** - Cropped sequences
+**Stage 3: migrama extract** - Cropped sequences
 ```
 /extracted/
   fov_{idx}/pattern_{idx}/seq_{idx}/
@@ -110,6 +110,6 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
 ```
 
 ### Cell-Grapher Input Requirements
-- Cell-filter NPY file with segmentation channel (last channel)
+- Migrama filter NPY file with segmentation channel (last channel)
 - Optional YAML metadata file for channel information
 - Segmentation masks should have local cell IDs (background=0, cells=1,2,3...)

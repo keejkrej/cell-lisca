@@ -1,15 +1,64 @@
-[tool.uv.workspace]
-members = ["cell-core", "cell-tracker", "cell-viewer", "cell-filter", "cell-pattern", "cell-tensionmap"]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.uv.sources]
-cell-core = { workspace = true }
-cell-tracker = { workspace = true }
-cell-viewer = { workspace = true }
-cell-filter = { workspace = true }
-cell-pattern = { path = "cell-pattern" }
-cell-tensionmap = { path = "cell-tensionmap" }
+[project]
+name = "migrama"
+version = "0.1.0"
+description = "A comprehensive toolkit for micropatterned timelapse microscopy analysis"
+requires-python = ">=3.11"
+license = "MIT"
+authors = [
+    { name = "Tianyi Cao", email = "ctyjackcao@outlook.com" }
+]
+dependencies = [
+    # Core dependencies
+    "numpy",
+    "h5py",
+    "pydantic>=2.0.0",
+    "typer",
+    # Cellpose and segmentation dependencies
+    "cellpose>4",
+    "torch",
+    "torchvision",
+    "matplotlib",
+    "opencv-python",
+    "scikit-image",
+    "scipy",
+    "tifffile",
+    # Graph and tracking dependencies
+    "networkx",
+    "btrack",
+    # Pattern detection dependencies
+    "nd2",
+    "xarray",
+    "dask",
+    # Additional dependencies
+    "pyyaml>=6.0.2",
+    # Viewer dependencies
+    "PySide6",
+]
+
+[project.scripts]
+migrama = "migrama.cli.main:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/migrama"]
+source = "src"
 
 [dependency-groups]
 dev = [
+    "ruff>=0.14.9",
     "pytest>=8.4.1",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "B", "C90", "UP"]
+ignore = ["E501", "B008"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]

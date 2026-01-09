@@ -44,7 +44,7 @@ def analysis(
     # Parse range
     start_fov, end_fov = parse_range(range_str)
     
-    from cell_filter.analysis import Analyzer
+    from ..analysis import Analyzer
     
     analyzer = Analyzer(
         cells_path=cells,
@@ -82,7 +82,7 @@ def extract(
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
     
-    from cell_filter.extract import Extractor
+    from ..extract import Extractor
     
     extractor = Extractor(
         cells_path=cells,

@@ -1,4 +1,4 @@
-"""Cell-core: Shared utilities and interfaces for cell-lisca modules."""
+"""Migrama core: Shared utilities and interfaces for migrama modules."""
 
 from .io import h5_io
 from .models import data_models

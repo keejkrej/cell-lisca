@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Dict, List, Tuple, Any
 
-from cell_core.io.h5_io import (
+from ..core.io.h5_io import (
     load_bounding_boxes_hdf5,
     get_fov_bounding_boxes,
     get_available_fovs,

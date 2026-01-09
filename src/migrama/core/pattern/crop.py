@@ -7,7 +7,7 @@ import numpy as np
 from pathlib import Path
 from dataclasses import dataclass
 import logging
-from cell_pattern.utils import load_nd2, get_nd2_frame, get_nd2_channel_stack
+from ..pattern.utils import load_nd2, get_nd2_frame, get_nd2_channel_stack
 
 # Configure logging
 logger = logging.getLogger(__name__)
