@@ -25,7 +25,7 @@ def detect(
         level=log_level, format="%(levelname)s - %(name)s - %(message)s"
     )
     
-    from cell_pattern.core import Patterner
+    from cell_core import Patterner
     
     patterner = Patterner(
         patterns_path=patterns,
@@ -55,7 +55,7 @@ def extract(
         level=log_level, format="%(levelname)s - %(name)s - %(message)s"
     )
     
-    from cell_pattern.core import Patterner
+    from cell_core import Patterner
     
     patterner = Patterner(
         patterns_path=patterns,

@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 import cv2
 import logging
 from pathlib import Path
-from cell_pattern.core import Cropper, CropperParameters
+from cell_core import Cropper, CropperParameters
 from cell_core.io.h5_io import save_bounding_boxes_hdf5
 
 # Configure logging

@@ -7,7 +7,7 @@ applying user-specified criteria and outputting to H5 format.
 
 from pathlib import Path
 import numpy as np
-from cell_filter.core import Cropper, CropperParameters, CellposeSegmenter
+from cell_core import Cropper, CropperParameters, CellposeSegmenter
 import logging
 from typing import Dict, List, Any, Tuple
 

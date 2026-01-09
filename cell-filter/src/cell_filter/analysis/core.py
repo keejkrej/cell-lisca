@@ -6,7 +6,7 @@ storing results in an H5 file for later processing by the extract stage.
 """
 
 import time
-from cell_filter.core import Cropper, CropperParameters, CellposeCounter
+from cell_core import Cropper, CropperParameters, CellposeCounter
 import logging
 from pathlib import Path
 from typing import List, Dict, Any
