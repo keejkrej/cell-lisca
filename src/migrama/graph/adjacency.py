@@ -10,6 +10,8 @@ from matplotlib.axes import Axes
 from matplotlib.figure import Figure
 from scipy.ndimage import binary_dilation
 
+from migrama.core.voronoi import centroids_from_mask, generate_voronoi_labels
+
 logger = logging.getLogger(__name__)
 
 
@@ -348,6 +350,73 @@ class BoundaryPixelTracker:
         ax2.imshow(boundary_mask)
         ax2.set_title(f"Boundaries ({len(boundaries)} tuples)")
         ax2.axis("off")
+
+        plt.tight_layout()
+        return fig, axes
+
+    def plot_4panel_figure(
+        self,
+        cell_mask: np.ndarray,
+        nuclei_mask: np.ndarray,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+        frame_idx: int = 0,
+    ) -> tuple[Figure, np.ndarray]:
+        """Create a 4-panel figure with cell masks, boundaries, nuclei mask, and Voronoi.
+
+        Parameters
+        ----------
+        cell_mask : np.ndarray
+            2D segmentation mask for cells with integer labels (0 = background)
+        nuclei_mask : np.ndarray
+            2D labeled mask for nuclei with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+        frame_idx : int
+            Frame index for title
+
+        Returns
+        -------
+        tuple
+            (figure, axes) - matplotlib Figure and array of Axes (4 axes)
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+        ax1 = axes[0, 0]
+        ax1.imshow(cell_mask, cmap="tab20", interpolation="nearest")
+        ax1.set_title(f"Cell Segmentation (Frame {frame_idx})")
+        ax1.axis("off")
+
+        boundary_mask = self.create_boundary_mask(cell_mask, boundaries)
+        ax2 = axes[0, 1]
+        ax2.imshow(boundary_mask)
+        ax2.set_title(f"Boundaries ({len(boundaries)} tuples)")
+        ax2.axis("off")
+
+        ax3 = axes[1, 0]
+        if nuclei_mask is not None:
+            ax3.imshow(nuclei_mask, cmap="viridis", interpolation="nearest")
+            ax3.set_title("Nuclei Mask")
+        else:
+            ax3.text(0.5, 0.5, "No nuclei mask available", ha="center", va="center", transform=ax3.transAxes)
+            ax3.set_title("Nuclei Mask (N/A)")
+        ax3.axis("off")
+
+        ax4 = axes[1, 1]
+        if nuclei_mask is not None:
+            centroids = centroids_from_mask(nuclei_mask)
+            if len(centroids) > 0:
+                voronoi_labels = generate_voronoi_labels(cell_mask.shape, centroids, cell_mask)
+                ax4.imshow(voronoi_labels, cmap="viridis", interpolation="nearest")
+                ax4.set_title(f"Nuclei Voronoi ({len(centroids)} regions)")
+                for _, (cx, cy) in enumerate(centroids):
+                    ax4.plot(cx, cy, "ko", markersize=3)
+            else:
+                ax4.text(0.5, 0.5, "No nuclei detected", ha="center", va="center", transform=ax4.transAxes)
+                ax4.set_title("Nuclei Voronoi (N/A)")
+        else:
+            ax4.text(0.5, 0.5, "No nuclei mask available", ha="center", va="center", transform=ax4.transAxes)
+            ax4.set_title("Nuclei Voronoi (N/A)")
+        ax4.axis("off")
 
         plt.tight_layout()
         return fig, axes

@@ -11,6 +11,7 @@ from .pattern import (
 )
 from .segmentation import CellposeCounter, CellposeSegmenter
 from .tracking import CellTracker
+from .voronoi import centroids_from_mask, generate_voronoi_labels
 
 __all__ = [
     # Pattern detection (pattern.nd2 -> CSV)
@@ -28,4 +29,7 @@ __all__ = [
     "CellTracker",
     # Graph
     "CellGrapher",
+    # Voronoi
+    "centroids_from_mask",
+    "generate_voronoi_labels",
 ]

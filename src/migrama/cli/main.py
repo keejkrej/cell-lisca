@@ -297,6 +297,7 @@ def graph(
     typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
     loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
     segmentation_masks = np.asarray(loaded_data["segmentation_masks"])
+    nuclei_masks = np.asarray(loaded_data["nuclei_masks"]) if loaded_data["nuclei_masks"] is not None else None
 
     if segmentation_masks.ndim != 3:
         typer.echo(f"Error: Expected 3D segmentation masks, got shape {segmentation_masks.shape}", err=True)
@@ -317,10 +318,11 @@ def graph(
 
     for frame_idx in range(start, end):
         mask = segmentation_masks[frame_idx]
+        nuclei_mask_frame = nuclei_masks[frame_idx] if nuclei_masks is not None else None
         boundaries = tracker.extract_boundaries(mask)
 
         if plot:
-            fig, _ = tracker.plot_boundaries_figure(mask, boundaries, frame_idx)
+            fig, _ = tracker.plot_4panel_figure(mask, nuclei_mask_frame, boundaries, frame_idx)
             out_path = output_dir / f"frame_{frame_idx:04d}.png"
             fig.savefig(out_path, dpi=150, bbox_inches="tight")
             plt.close(fig)
