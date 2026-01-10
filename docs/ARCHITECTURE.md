@@ -1,99 +1,78 @@
-# Cell-LISCA Architecture Redesign
+# Migrama Architecture
 
 ## Overview
 
-The cell-lisca project has been redesigned with a new modular architecture to improve maintainability, reduce coupling between modules, and provide clearer interfaces for data flow.
+Migrama is a monolithic Python package for analyzing micropatterned timelapse microscopy images. The codebase is organized into modular packages under `src/migrama/`.
 
-## Key Changes
+## Package Structure
 
-### 1. New cell-core Package
+### Core Package (`src/migrama/core/`)
 
-A new shared package `cell-core` has been created to provide:
-- **Shared I/O utilities**: HDF5 read/write functions used across modules
-- **Data models**: Pydantic models defining data structures for inter-module communication
-- **Pipeline interfaces**: Abstract base classes defining contracts for pipeline stages
+Shared utilities and interfaces used across all modules:
 
-### 2. Elimination of sys.path Hacks
+- `io/`: HDF5 I/O utilities, ND2 file handling
+- `models/`: Pydantic models for data validation
+- `interfaces/`: Abstract base classes for pipeline stages
+- `segmentation/`: Cell segmentation utilities (Cellpose wrapper)
+- `tracking/`: Cell tracking utilities
+- `network/`: Graph operations for region adjacency analysis
+- `pattern/`: Pattern detection utilities
 
-Previously, cell-filter used sys.path manipulation to import from cell-pattern:
-```python
-# OLD - Hacky approach
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', '..', 'cell-pattern', 'src'))
-from cell_pattern.utils.h5_io import ...
-```
+### Pipeline Stages
 
-Now all modules import from cell-core:
-```python
-# NEW - Clean approach
-from cell_core.io.h5_io import ...
-```
-
-### 3. Standardized CLI Interfaces
-
-All modules now use Typer for consistent CLI interfaces:
-- cell-pattern: Already used Typer
-- cell-filter: Already used Typer  
-- cell-grapher: Migrated from argparse to Typer
-- cell-viewer: GUI application (no CLI)
-
-### 4. Improved Data Flow
-
-The data flow between modules is now more explicit:
+The analysis pipeline consists of four stages:
 
 ```
-cell-pattern → HDF5 file (bounding boxes)
-     ↓
-cell-filter → HDF5 file (bounding boxes + analysis + extracted sequences)
-     ↓
-cell-grapher → Analysis results (graphs, transitions)
+Stage 1: Pattern Detection (migrama.pattern)
+  Input: patterns.nd2 (single-frame, single-channel)
+  Output: patterns.csv with columns: cell,fov,x,y,w,h
+
+Stage 2: Cell Analysis (migrama.analyze)
+  Input: cells.nd2 + patterns.csv
+  Output: analysis.csv with columns: cell,fov,x,y,w,h,t0,t1
+
+Stage 3: Sequence Extraction (migrama.extract)
+  Input: cells.nd2 + analysis.csv
+  Output: extracted.h5 with cropped timelapse sequences and tracked masks
+
+Stage 4: Graph Analysis (migrama.graph)
+  Input: extracted.h5
+  Output: Region adjacency graphs, T1 transition analysis
 ```
 
-## Module Structure
+### Feature Packages
 
-### cell-core
-- `io/h5_io.py`: HDF5 I/O utilities for all data stages
-- `models/data_models.py`: Pydantic models for data validation
-- `interfaces/pipeline.py`: Abstract base classes for pipeline stages
+- **pattern**: Pattern detection and bounding box generation
+- **analyze**: Cell counting and valid frame range detection
+- **extract**: Cropped sequence extraction with segmentation and tracking
+- **graph**: Region adjacency graph construction and T1 transition analysis
+- **tension**: TensionMap VMSI integration for stress tensor inference
+- **viewer**: PySide6-based interactive visualization
 
-### cell-pattern
-- Detects and annotates micropatterns
-- Outputs bounding boxes to HDF5
-- Depends on: cell-core (for I/O)
+## CLI Interface
 
-### cell-filter
-- Analyzes cell counts and extracts sequences
-- Reads/writes HDF5 files
-- Depends on: cell-core (for I/O and models)
+All modules use Typer for consistent CLI interfaces. Entry point:
 
-### cell-grapher
-- Tracks cells and analyzes T1 transitions
-- Reads extracted sequences
-- Depends on: cell-core (for models)
+```bash
+migrama <command> [options]
+```
 
-### cell-viewer
-- Interactive visualization GUI
-- Standalone application
+Available commands: `pattern`, `analyze`, `extract`, `graph`, `tension`, `viewer`
 
-## Benefits
+## Data Flow
 
-1. **Reduced Coupling**: Modules no longer need to know about each other's internal structure
-2. **Clear Contracts**: Data models explicitly define what flows between stages
-3. **Shared Infrastructure**: Common utilities are centralized in cell-core
-4. **Better Testing**: Interfaces can be mocked for unit testing
-5. **Easier Maintenance**: Changes to I/O or data structures happen in one place
+1. `migrama pattern --patterns patterns.nd2 --output patterns.csv`
+2. `migrama analyze --cells cells.nd2 --csv patterns.csv --output analysis.csv`
+3. `migrama extract --cells cells.nd2 --csv analysis.csv --output extracted.h5`
+4. `migrama graph --input extracted.h5 --output ./analysis --fov 0 --pattern 0 --sequence 0`
 
-## Future Improvements
+## Dependencies
 
-1. **Unified Data Format**: Consider having cell-grapher read directly from HDF5 instead of NPY
-2. **Pipeline Orchestrator**: Implement the Pipeline class from cell-core.interfaces.pipeline
-3. **Configuration Management**: Centralize configuration using cell-core models
-4. **Validation**: Add runtime validation using Pydantic models at module boundaries
-
-## Migration Guide
-
-To update existing code:
-
-1. Replace imports from `cell_pattern.utils.h5_io` with `cell_core.io.h5_io`
-2. Remove any sys.path manipulation for cross-module imports
-3. Use data models from `cell_core.models` for type hints and validation
-4. Follow the interface contracts in `cell_core.interfaces` for new modules
+All dependencies are listed in `pyproject.toml`. Key dependencies:
+- **numpy**, **scipy**, **scikit-image**: Core scientific computing
+- **cellpose**: Cell segmentation
+- **nd2**: Nikon ND2 file format support
+- **h5py**: HDF5 file I/O
+- **networkx**, **btrack**: Graph operations and cell tracking
+- **PySide6**: GUI for viewer module
+- **typer**: CLI framework

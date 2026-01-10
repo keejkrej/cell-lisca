@@ -7,7 +7,7 @@ A comprehensive toolkit for analyzing micropatterned timelapse microscopy images
 Migrama is a monolithic Python package that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of seven integrated modules that work together to provide a complete analysis pipeline:
 
 1. **migrama.pattern**: Pattern detection and annotation for micropatterned microscopy images
-2. **migrama.filter**: Cell counting and analysis with segmentation
+2. **migrama.analyze**: Cell counting and analysis with segmentation
 3. **migrama.extract**: Extract cropped sequences based on cell count criteria
 4. **migrama.graph**: Cell tracking, region adjacency graph construction, and T1 transition analysis
 5. **migrama.tension**: Integration with TensionMap for stress tensor inference
@@ -80,11 +80,11 @@ migrama --help
 This will show all available subcommands:
 
 - `migrama pattern` - Pattern detection and annotation
-- `migrama filter` - Cell counting and analysis  
+- `migrama analyze` - Cell counting and analysis  
 - `migrama extract` - Extract cropped sequences
 - `migrama graph` - Cell tracking and graph analysis
 - `migrama tension` - Tension map analysis
-- `migrama viewer` - Launch interactive viewer
+- `migrama viewer` - Interactive viewer
 
 ## Documentation
 
@@ -108,63 +108,49 @@ make html
 
 ### Basic Workflow
 
-1. **Pattern Detection**: Show/save a plot of the patterns marked with bounding boxes
+1. **Pattern Detection**: Detect patterns and save bounding boxes to CSV
 
 ```bash
-migrama pattern detect \
+migrama pattern \
   --patterns /path/to/patterns.nd2 \
-  --cells /path/to/cells.nd2 \
-  --nuclei-channel 1 \
-  --fov 0 \
-  --output ./output
+  --output ./patterns.csv
 ```
-You will find `fov_000.png` in the output folder.
 
-2. **Cell Filtering**: Filter the timelapse based on number of cells
+The output CSV has columns: `cell,fov,x,y,w,h`
+
+2. **Cell Analysis**: Analyze cell counts and identify valid frame ranges
 
 ```bash
-migrama filter analysis \
+migrama analyze \
   --cells /path/to/cells.nd2 \
-  --h5 ./bounding_boxes.h5 \
+  --csv ./patterns.csv \
+  --output ./analysis.csv \
   --nuclei-channel 1 \
-  --range 0:1 \
-  --min-size 30
+  --n-cells 4
 ```
 
-3. **Data Extraction**: Extract the timelapse of filtered cells
+The output CSV adds columns: `t0,t1` (valid frame range for each pattern).
+
+3. **Data Extraction**: Extract cropped timelapse sequences with tracking
 
 ```bash
 migrama extract \
   --cells /path/to/cells.nd2 \
-  --h5 ./bounding_boxes.h5 \
+  --csv ./analysis.csv \
+  --output ./extracted.h5 \
   --nuclei-channel 1 \
-  --n-cells 4 \
-  --output ./output/ \
-  --min-frames 20 \
-  --tolerance-gap 6
+  --min-frames 20
 ```
 
-4. **Cell Tracking & Analysis**: Track cells and analyze topological transitions
+4. **Cell Tracking & Analysis**: Build region adjacency graphs and analyze T1 transitions
 
-For NPY files (legacy):
 ```bash
-migrama graph analyze \
-  --input ./output/fov_000_pattern_000_seq_000.npy \
-  --output ./analysis
-```
-
-For H5 files (recommended):
-```bash
-# List available sequences
-migrama graph list-sequences --input ./output/bounding_boxes_all_fovs.h5
-
-# Analyze a specific sequence
-migrama graph analyze \
-  --input ./output/bounding_boxes_all_fovs.h5 \
+migrama graph \
+  --input ./extracted.h5 \
+  --output ./analysis \
   --fov 0 \
   --pattern 0 \
-  --sequence 0 \
-  --output ./analysis
+  --sequence 0
 ```
 
 5. **Visualization**: Interactively view and select frames
@@ -233,7 +219,7 @@ migrama/
 
 ### Package-Specific Dependencies
 
-**cell-filter**:
+**Segmentation & Analysis**:
 
 - torch
 - matplotlib
@@ -248,7 +234,7 @@ migrama/
 - networkx
 - pyyaml
 
-**cell-grapher**:
+**Tracking**:
 
 - numpy
 - matplotlib
@@ -259,7 +245,7 @@ migrama/
 - opencv-python
 - btrack
 
-**cell-viewer**:
+**Viewer**:
 
 - PySide6
 - numpy
