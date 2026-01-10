@@ -107,14 +107,48 @@ def convert(
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
     from ..convert import Converter
+    from ..core.progress import ProgressEvent
 
     converter = Converter(
         input_folder=input_folder,
         output_path=output,
         nuclei_channel=nuclei_channel,
     )
-    sequences = converter.convert(min_frames=min_frames)
-    typer.echo(f"Saved {sequences} sequences to {output}")
+
+    from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
+
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    progress.start()
+
+    tasks: dict[str, TaskID] = {}
+
+    def handle_progress(event: ProgressEvent) -> None:
+        if event.state not in tasks:
+            tasks[event.state] = progress.add_task(
+                f"{event.state} ({event.iterator})",
+                total=event.total or 1,
+            )
+        task_id = tasks[event.state]
+        progress.update(task_id, completed=event.current)
+
+    def on_file_start(filename: str) -> None:
+        typer.echo(f"\n{filename}")
+
+    converter.progress.connect(handle_progress)
+
+    try:
+        sequences = converter.convert(min_frames=min_frames, on_file_start=on_file_start)
+        progress.stop()
+        typer.echo(f"Saved {sequences} sequences to {output}")
+    except Exception:
+        progress.stop()
+        raise
 
 
 @app.command()
@@ -232,9 +266,13 @@ def tension(
 @app.command()
 def info(
     input: str = typer.Option(..., "--input", "-i", help="Path to H5 file"),
+    plot: str | None = typer.Option(None, "--plot", "-p", help="Plot a dataset slice: 'path,(dim0,dim1,...)'"),
+    output: str | None = typer.Option(None, "--output", "-o", help="Save plot to PNG file"),
 ):
-    """Print H5 file structure."""
+    """Print H5 file structure or plot a dataset slice."""
     import h5py
+    import matplotlib.pyplot as plt
+    import numpy as np
 
     path = Path(input)
     if not path.exists():
@@ -251,9 +289,65 @@ def info(
                 typer.echo(f"{indent}  attr {k}: {v}")
 
     with h5py.File(path, "r") as f:
-        typer.echo(f"H5 Structure: {path}")
-        typer.echo("-" * 60)
-        f.visititems(print_structure)
+        if plot is not None:
+            if "," not in plot or "(" not in plot or ")" not in plot:
+                typer.echo("Error: Invalid --plot format. Expected 'path,(dim0,dim1,...)'", err=True)
+                raise typer.Exit(1)
+
+            path_part, slice_part = plot.split(",", 1)
+            path_part = path_part.strip()
+            slice_part = slice_part.strip()
+
+            if not slice_part.startswith("(") or not slice_part.endswith(")"):
+                typer.echo("Error: Invalid --plot format. Expected 'path,(dim0,dim1,...)'", err=True)
+                raise typer.Exit(1)
+
+            slice_str = slice_part[1:-1]
+            try:
+                indices = [int(x.strip()) for x in slice_str.split(",") if x.strip() != ""]
+            except ValueError:
+                typer.echo("Error: Slice indices must be integers", err=True)
+                raise typer.Exit(1)
+
+            if path_part not in f:
+                typer.echo(f"Error: Dataset not found: {path_part}", err=True)
+                raise typer.Exit(1)
+
+            obj = f[path_part]
+            if not isinstance(obj, h5py.Dataset):
+                typer.echo(f"Error: Not a dataset: {path_part}", err=True)
+                raise typer.Exit(1)
+
+            dataset = obj
+            data = dataset[...]
+
+            try:
+                sliced = data[tuple(indices)]
+            except IndexError as e:
+                typer.echo(f"Error: Invalid slice indices for dataset shape {data.shape}: {e}", err=True)
+                raise typer.Exit(1)
+
+            if sliced.ndim != 2:
+                typer.echo(f"Error: Sliced result has {sliced.ndim} dimensions, expected 2", err=True)
+                raise typer.Exit(1)
+
+            plt.figure(figsize=(8, 6))
+            plt.imshow(np.asarray(sliced), cmap="viridis")
+            plt.colorbar()
+            plt.title(path_part)
+
+            if output:
+                plt.savefig(output)
+                typer.echo(f"Saved plot to: {output}")
+            else:
+                typer.echo("Error: --output is required when using --plot", err=True)
+                raise typer.Exit(1)
+
+            plt.close()
+        else:
+            typer.echo(f"H5 Structure: {path}")
+            typer.echo("-" * 60)
+            f.visititems(print_structure)
 
 
 @app.command()

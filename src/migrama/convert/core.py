@@ -2,6 +2,7 @@
 
 import logging
 from pathlib import Path
+from typing import Callable, Optional
 
 import h5py
 import numpy as np
@@ -9,6 +10,7 @@ import tifffile
 from skimage.filters import threshold_otsu
 
 from ..core import CellposeSegmenter, CellTracker
+from ..core.progress import ProgressEmitter
 
 logger = logging.getLogger(__name__)
 
@@ -38,14 +40,22 @@ class Converter:
         self.nuclei_channel = nuclei_channel
 
         self.segmenter = CellposeSegmenter()
+        self._progress = ProgressEmitter()
 
-    def convert(self, min_frames: int = 1) -> int:
+    @property
+    def progress(self):
+        """Get the progress signal for connecting callbacks."""
+        return self._progress.progress
+
+    def convert(self, min_frames: int = 1, on_file_start: Optional[Callable] = None) -> int:
         """Convert TIFF files to H5.
 
         Parameters
         ----------
         min_frames : int
             Minimum frames required to process a sequence
+        on_file_start : Callable | None
+            Optional callback called with (filename) before processing each file
 
         Returns
         -------
@@ -70,16 +80,22 @@ class Converter:
                     logger.info(f"Skipping {tiff_path.name}: only {n_frames} frames")
                     continue
 
-                cell_masks = self._segment_timelapse(timelapse)
+                if on_file_start:
+                    on_file_start(tiff_path.name)
+
+                cell_masks = self._segment_timelapse(timelapse, tiff_path.name)
 
                 tracker = CellTracker()
+                n_frames = len(cell_masks)
+                self._progress.emit("tracking", "frame", 0, n_frames)
                 tracking_maps = tracker.track_frames(cell_masks)
+                self._progress.emit("tracking", "frame", n_frames, n_frames)
                 tracked_cell_masks = [
                     tracker.get_tracked_mask(mask, track_map)
                     for mask, track_map in zip(cell_masks, tracking_maps, strict=False)
                 ]
 
-                nuclei_masks = self._build_nuclei_masks(timelapse, tracked_cell_masks, tracking_maps)
+                nuclei_masks = self._build_nuclei_masks(timelapse, tracked_cell_masks, tracking_maps, tiff_path.name)
 
                 self._write_sequence(
                     h5file,
@@ -114,15 +130,18 @@ class Converter:
         logger.debug(f"Loaded {tiff_path.name}: shape {data.shape}")
         return data
 
-    def _segment_timelapse(self, timelapse: np.ndarray) -> list[np.ndarray]:
+    def _segment_timelapse(self, timelapse: np.ndarray, file_name: str) -> list[np.ndarray]:
         """Segment all channels together across frames using Cellpose."""
+        n_frames = timelapse.shape[0]
+        self._progress.emit("segmentation", "frame", 0, n_frames)
         masks = []
-        for frame_idx in range(timelapse.shape[0]):
+        for frame_idx in range(n_frames):
             frame_data = timelapse[frame_idx]
             if frame_data.ndim == 3 and frame_data.shape[0] <= 3:
                 frame_data = np.transpose(frame_data, (1, 2, 0))
             result = self.segmenter.segment_image(frame_data)
             masks.append(result["masks"])
+            self._progress.emit("segmentation", "frame", frame_idx + 1, n_frames)
         return masks
 
     def _build_nuclei_masks(
@@ -130,8 +149,11 @@ class Converter:
         timelapse: np.ndarray,
         tracked_cell_masks: list[np.ndarray],
         tracking_maps: list[dict[int, int]],
+        file_name: str,
     ) -> list[np.ndarray]:
         """Build nuclei masks by Otsu thresholding nuclei channel inside each cell."""
+        n_frames = len(tracked_cell_masks)
+        self._progress.emit("nuclei", "frame", 0, n_frames)
         nuclei_masks = []
         for frame_idx, (cell_mask, track_map) in enumerate(zip(tracked_cell_masks, tracking_maps, strict=False)):
             nuclei_mask = np.zeros_like(cell_mask, dtype=np.int32)
@@ -156,6 +178,7 @@ class Converter:
                     nuclei_mask[nuclei_pixels] = track_id
 
             nuclei_masks.append(nuclei_mask)
+            self._progress.emit("nuclei", "frame", frame_idx + 1, n_frames)
         return nuclei_masks
 
     def _write_sequence(
