@@ -1,8 +1,10 @@
-import typer
-from pathlib import Path
-import numpy as np
-from .integration import run_tensionmap_analysis
 import pickle
+from pathlib import Path
+
+import numpy as np
+import typer
+
+from .integration import run_tensionmap_analysis
 
 app = typer.Typer(add_completion=False)
 

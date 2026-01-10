@@ -1,7 +1,7 @@
+from pathlib import Path
+
 import numpy as np
 import yaml
-from typing import Dict, List, Optional
-from pathlib import Path
 
 
 class SegmentationLoader:
@@ -11,16 +11,16 @@ class SegmentationLoader:
     This class loads segmentation data from cell-filter NPY files that contain
     a dedicated segmentation channel, eliminating the need for running Cellpose.
     """
-    
+
     def __init__(self):
         """Initialize the SegmentationLoader."""
         pass
-        
+
     def load_cell_filter_data(
         self,
         npy_path: str,
-        yaml_path: Optional[str] = None
-    ) -> Dict[str, any]:
+        yaml_path: str | None = None
+    ) -> dict[str, any]:
         """
         Load cell-filter output data including segmentation masks.
         
@@ -43,18 +43,18 @@ class SegmentationLoader:
         """
         # Load the main data
         data = np.load(npy_path)
-        
+
         # Try to find YAML metadata if not provided
         if yaml_path is None:
             npy_path_obj = Path(npy_path)
             yaml_path = str(npy_path_obj.with_suffix('.yaml'))
-        
+
         metadata = {}
         channels = None
         segmentation_channel_idx = -1  # Default to last channel
 
         if Path(yaml_path).exists():
-            with open(yaml_path, 'r') as f:
+            with open(yaml_path) as f:
                 metadata = yaml.safe_load(f)
                 channels = metadata.get('channels', [])
 
@@ -93,10 +93,10 @@ class SegmentationLoader:
             'channels': channels,
             'segmentation_channel_idx': segmentation_channel_idx
         }
-    
+
     def get_frame_mask(
         self,
-        cell_filter_data: Dict[str, any],
+        cell_filter_data: dict[str, any],
         frame_idx: int
     ) -> np.ndarray:
         """
@@ -121,10 +121,10 @@ class SegmentationLoader:
 
     def get_nucleus_channel(
         self,
-        cell_filter_data: Dict[str, any],
+        cell_filter_data: dict[str, any],
         frame_idx: int,
         nucleus_channel_name: str = 'cell_ch_1'
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Get nucleus channel for a specific frame.
 
@@ -161,11 +161,11 @@ class SegmentationLoader:
             return None
 
         return data[frame_idx, nucleus_idx]
-    
+
     def get_cell_channels(
         self,
-        cell_filter_data: Dict[str, any],
-        exclude_channels: List[str] = ['pattern', 'segmentation']
+        cell_filter_data: dict[str, any],
+        exclude_channels: list[str] = ['pattern', 'segmentation']
     ) -> np.ndarray:
         """
         Extract cell image channels, excluding pattern and segmentation.
@@ -184,7 +184,7 @@ class SegmentationLoader:
         """
         data = cell_filter_data['data']
         channels = cell_filter_data['channels']
-        
+
         if not channels:
             # If no channel names, assume last channel is segmentation
             cell_data = data[:, :-1]
@@ -194,19 +194,19 @@ class SegmentationLoader:
             for i, channel_name in enumerate(channels):
                 if channel_name not in exclude_channels:
                     keep_indices.append(i)
-            
+
             if keep_indices:
                 cell_data = data[:, keep_indices]
             else:
                 # If all channels excluded, return empty array
                 cell_data = np.array([])
-        
+
         return cell_data
-    
+
     def validate_cell_filter_output(
         self,
         npy_path: str,
-        yaml_path: Optional[str] = None
+        yaml_path: str | None = None
     ) -> bool:
         """
         Validate that the cell-filter output has expected format.
@@ -225,31 +225,31 @@ class SegmentationLoader:
         """
         try:
             data = np.load(npy_path)
-            
+
             # Check data dimensions
             if data.ndim != 4:
                 print(f"Expected 4D data, got {data.ndim}D")
                 return False
-            
+
             # Check if we have at least pattern + cell channels + segmentation
             if data.shape[1] < 2:
                 print(f"Expected at least 2 channels, got {data.shape[1]}")
                 return False
-            
+
             # Check YAML metadata if provided
             if yaml_path and Path(yaml_path).exists():
-                with open(yaml_path, 'r') as f:
+                with open(yaml_path) as f:
                     metadata = yaml.safe_load(f)
-                    
+
                 if 'channels' not in metadata:
                     print("Warning: 'channels' not found in YAML metadata")
                 else:
                     channels = metadata['channels']
                     if 'segmentation' not in channels:
                         print("Warning: 'segmentation' channel not found in metadata")
-            
+
             return True
-            
+
         except Exception as e:
             print(f"Error validating cell-filter output: {e}")
             return False

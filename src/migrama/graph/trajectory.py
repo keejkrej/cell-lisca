@@ -2,8 +2,8 @@
 Cell trajectory tracking for nucleus and center of mass analysis.
 """
 
+
 import numpy as np
-from typing import Dict, List, Tuple, Optional
 from scipy import ndimage
 
 
@@ -35,9 +35,9 @@ class TrajectoryAnalyzer:
         self,
         frame_idx: int,
         segmentation_mask: np.ndarray,
-        tracking_map: Dict[int, int],
+        tracking_map: dict[int, int],
         nucleus_channel: np.ndarray
-    ) -> Dict[int, Dict[str, Tuple[float, float]]]:
+    ) -> dict[int, dict[str, tuple[float, float]]]:
         """
         Analyze nucleus and center of mass positions for all cells in a frame.
 
@@ -113,7 +113,7 @@ class TrajectoryAnalyzer:
 
         return frame_results
 
-    def get_trajectory(self, global_id: int) -> Optional[Dict]:
+    def get_trajectory(self, global_id: int) -> dict | None:
         """
         Get trajectory data for a specific cell.
 
@@ -129,7 +129,7 @@ class TrajectoryAnalyzer:
         """
         return self.trajectories.get(global_id)
 
-    def get_all_trajectories(self) -> Dict[int, Dict]:
+    def get_all_trajectories(self) -> dict[int, dict]:
         """
         Get all trajectory data.
 
@@ -144,7 +144,7 @@ class TrajectoryAnalyzer:
         self,
         global_id: int,
         use_nucleus: bool = True
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Calculate frame-to-frame displacement for a cell.
 
@@ -180,7 +180,7 @@ class TrajectoryAnalyzer:
         global_id: int,
         use_nucleus: bool = True,
         time_per_frame: float = 1.0
-    ) -> Optional[np.ndarray]:
+    ) -> np.ndarray | None:
         """
         Calculate velocity for a cell.
 
@@ -206,7 +206,7 @@ class TrajectoryAnalyzer:
         velocities = displacements / time_per_frame
         return velocities
 
-    def export_trajectories_to_dict(self) -> List[Dict]:
+    def export_trajectories_to_dict(self) -> list[dict]:
         """
         Export all trajectories to a list of dictionaries (for CSV export).
 
@@ -244,7 +244,7 @@ class TrajectoryAnalyzer:
 
         return export_data
 
-    def get_trajectory_summary(self) -> Dict[str, any]:
+    def get_trajectory_summary(self) -> dict[str, any]:
         """
         Get summary statistics for all trajectories.
 

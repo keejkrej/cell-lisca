@@ -1,8 +1,8 @@
+import logging
+
 import numpy as np
-from typing import List, Dict, Optional, Union
 import tifffile
 from cellpose import models
-import logging
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class CellposeSegmenter:
     def segment_image(
         self,
         image: np.ndarray,
-    ) -> Dict[str, np.ndarray]:
+    ) -> dict[str, np.ndarray]:
         """
         Segment a single image using Cellpose.
 
@@ -69,8 +69,8 @@ class CellposeSegmenter:
     def segment_timelapse(
         self,
         timelapse_path: str,
-        frames: Optional[Union[int, List[int]]] = None
-    ) -> List[Dict[str, np.ndarray]]:
+        frames: int | list[int] | None = None
+    ) -> list[dict[str, np.ndarray]]:
         """
         Segment a timelapse microscopy file.
 

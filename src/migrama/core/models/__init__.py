@@ -1,12 +1,5 @@
-"""Data models for cell-lisca modules."""
+"""Data models for migrama modules."""
 
-from .data_models import *
+# Models will be added as needed during refactoring
 
-__all__ = [
-    "BoundingBox",
-    "Pattern",
-    "FOVData",
-    "AnalysisRecord",
-    "ExtractedSequence",
-    "PipelineConfig",
-]
+__all__ = []

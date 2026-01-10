@@ -1,11 +1,5 @@
-"""Pipeline interfaces for cell-lisca modules."""
+"""Pipeline interfaces for migrama modules."""
 
-from .pipeline import *
+# Interfaces will be added as needed during refactoring
 
-__all__ = [
-    "PipelineStage",
-    "PatternDetectionInterface",
-    "AnalysisInterface", 
-    "ExtractionInterface",
-    "TrackingInterface",
-]
+__all__ = []

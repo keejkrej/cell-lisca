@@ -6,10 +6,10 @@ Usage:
     python scripts/extract_channels.py
 """
 
-import numpy as np
-import tifffile
-from pathlib import Path
 import logging
+from pathlib import Path
+
+import tifffile
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -34,17 +34,17 @@ def extract_channels(input_path: Path, output_path: Path, channels: list[int], k
     logger.info(f"Loading {input_path}")
     with tifffile.TiffFile(input_path) as tif:
         data = tif.asarray()
-    
+
     logger.info(f"Input shape: {data.shape}, dtype: {data.dtype}")
-    
+
     # Extract channels (assuming shape is T, C, H, W)
     extracted = data[:, channels, :, :]
-    
+
     if not keep_channel_dim and len(channels) == 1:
         extracted = extracted.squeeze(axis=1)
-    
+
     logger.info(f"Output shape: {extracted.shape}, dtype: {extracted.dtype}")
-    
+
     tifffile.imwrite(output_path, extracted, imagej=True)
     logger.info(f"Saved to {output_path}")
 
@@ -52,12 +52,12 @@ def extract_channels(input_path: Path, output_path: Path, channels: list[int], k
 def main():
     data_dir = Path(__file__).parent.parent / "data"
     input_path = data_dir / "4_up.ome.tif"
-    
+
     # Channel mapping for 4_up.ome.tif:
     # 0: nuclear fluor
-    # 1: membrane fluor  
+    # 1: membrane fluor
     # 2: phase contrast
-    
+
     # Extract phase contrast + membrane fluor (channels 2 and 1)
     extract_channels(
         input_path,
@@ -65,7 +65,7 @@ def main():
         channels=[2, 1],  # phase contrast first, then membrane
         keep_channel_dim=True
     )
-    
+
     # Extract phase contrast + nuclear fluor (channels 2 and 0)
     extract_channels(
         input_path,
@@ -73,7 +73,7 @@ def main():
         channels=[2, 0],  # phase contrast first, then nuclear
         keep_channel_dim=True
     )
-    
+
     # Extract phase contrast only (channel 2), keep channel dimension
     extract_channels(
         input_path,

@@ -1,168 +1,121 @@
-"""
-H5 data loader for cell-grapher to read directly from cell-filter H5 files.
-"""
+"""H5 data loader for graph analysis."""
 
-import numpy as np
-import yaml
-from typing import Dict, List, Optional, Tuple
-from pathlib import Path
 import logging
+from pathlib import Path
 
-from ..core.io.h5_io import (
-    load_extracted_sequence,
-    list_extracted_sequences,
-)
+import h5py
+import yaml
 
 logger = logging.getLogger(__name__)
 
 
 class H5SegmentationLoader:
-    """
-    A class for loading pre-computed segmentation masks from cell-filter H5 files.
-    
-    This class loads segmentation data directly from H5 files that contain
-    extracted sequences with segmentation masks, eliminating the need for NPY files.
-    """
-    
-    def __init__(self):
-        """Initialize the H5SegmentationLoader."""
-        pass
-        
+    """Load segmentation masks from migrama extracted H5 files."""
+
+    def __init__(self) -> None:
+        """Initialize the loader."""
+        return
+
     def load_cell_filter_data(
         self,
         h5_path: str,
         fov_idx: int,
         pattern_idx: int,
         seq_idx: int,
-        yaml_path: Optional[str] = None
-    ) -> Dict[str, any]:
-        """
-        Load cell-filter output data including segmentation masks from H5 file.
-        
-        Parameters
-        ----------
-        h5_path : str
-            Path to the H5 file containing extracted sequences
-        fov_idx : int
-            Field of view index
-        pattern_idx : int
-            Pattern index
-        seq_idx : int
-            Sequence index
-        yaml_path : str, optional
-            Path to the corresponding YAML metadata file.
-            If None, will try to find it automatically.
-            
-        Returns
-        -------
-        dict
-            Dictionary containing:
-            - 'data': Full timelapse data (frames, channels, height, width)
-            - 'segmentation_masks': List of segmentation masks
-            - 'metadata': YAML metadata if available
-            - 'channels': List of channel names
-        """
-        # Load the sequence data from H5
-        data, metadata = load_extracted_sequence(h5_path, fov_idx, pattern_idx, seq_idx)
-        
-        # Extract segmentation masks (last channel)
-        segmentation_masks = data[:, -1, :, :]  # Last channel is segmentation
-        
-        # Extract image data (all channels except segmentation)
-        image_data = data[:, :-1, :, :]
-        
-        # Try to find YAML metadata if not provided
+        yaml_path: str | None = None,
+    ) -> dict[str, object]:
+        """Load extracted data and segmentation masks from H5."""
+        group_path = f"fov_{fov_idx}/cell_{pattern_idx}/sequence_{seq_idx}"
+
+        with h5py.File(h5_path, "r") as h5file:
+            if group_path not in h5file:
+                raise ValueError(f"Sequence not found: {group_path}")
+            group = h5file[group_path]
+
+            data = group["data"][...]
+            segmentation_masks = group["cell_masks"][...]
+
+            channels = None
+            if "channels" in group:
+                channels = [c.decode("utf-8") for c in group["channels"][...]]
+
+            metadata = {
+                "t0": int(group.attrs.get("t0", -1)),
+                "t1": int(group.attrs.get("t1", -1)),
+                "bbox": group.attrs.get("bbox", None),
+            }
+
         if yaml_path is None:
-            h5_path_obj = Path(h5_path)
-            yaml_path = str(h5_path_obj.with_suffix('.yaml'))
-        
-        # Load YAML metadata if exists
+            yaml_path = str(Path(h5_path).with_suffix(".yaml"))
+
         yaml_metadata = None
-        if Path(yaml_path).exists():
-            with open(yaml_path, 'r') as f:
-                yaml_metadata = yaml.safe_load(f)
-        
-        # Get channel names from metadata or use defaults
-        channels = metadata.get('channels', [f'channel_{i}' for i in range(image_data.shape[1])])
-        
+        if yaml_path and Path(yaml_path).exists():
+            with open(yaml_path) as handle:
+                yaml_metadata = yaml.safe_load(handle)
+
         return {
-            'data': image_data,
-            'segmentation_masks': segmentation_masks,
-            'metadata': yaml_metadata,
-            'channels': channels,
-            'sequence_metadata': metadata
+            "data": data,
+            "segmentation_masks": segmentation_masks,
+            "metadata": yaml_metadata,
+            "channels": channels,
+            "sequence_metadata": metadata,
         }
-    
-    def list_sequences(self, h5_path: str) -> List[Dict[str, int]]:
-        """
-        List all available sequences in the H5 file.
-        
-        Parameters
-        ----------
-        h5_path : str
-            Path to the H5 file
-            
-        Returns
-        -------
-        list
-            List of dictionaries with fov_idx, pattern_idx, seq_idx
-        """
-        return list_extracted_sequences(h5_path)
-    
-    def validate_cell_filter_output(
-        self,
-        h5_path: str,
-        yaml_path: Optional[str] = None
-    ) -> bool:
-        """
-        Validate that the H5 file contains valid cell-filter output.
-        
-        Parameters
-        ----------
-        h5_path : str
-            Path to the H5 file
-        yaml_path : str, optional
-            Path to the corresponding YAML metadata file
-            
-        Returns
-        -------
-        bool
-            True if valid, False otherwise
-        """
+
+    def list_sequences(self, h5_path: str) -> list[dict[str, int]]:
+        """List available sequences in the H5 file."""
+        sequences: list[dict[str, int]] = []
+        with h5py.File(h5_path, "r") as h5file:
+            for fov_key in h5file.keys():
+                if not fov_key.startswith("fov_"):
+                    continue
+                fov_idx = int(fov_key.split("_")[1])
+                for cell_key in h5file[fov_key].keys():
+                    if not cell_key.startswith("cell_"):
+                        continue
+                    cell_idx = int(cell_key.split("_")[1])
+                    for seq_key in h5file[fov_key][cell_key].keys():
+                        if not seq_key.startswith("sequence_"):
+                            continue
+                        seq_idx = int(seq_key.split("_")[1])
+                        sequences.append(
+                            {
+                                "fov_idx": fov_idx,
+                                "pattern_idx": cell_idx,
+                                "seq_idx": seq_idx,
+                            }
+                        )
+        return sequences
+
+    def validate_cell_filter_output(self, h5_path: str, yaml_path: str | None = None) -> bool:
+        """Validate that the H5 file contains valid extracted data."""
         try:
-            # Check if H5 file exists
             if not Path(h5_path).exists():
                 logger.error(f"H5 file not found: {h5_path}")
                 return False
-            
-            # Try to list sequences
+
             sequences = self.list_sequences(h5_path)
-            
             if not sequences:
                 logger.error("No sequences found in H5 file")
                 return False
-            
-            # Try to load the first sequence
+
             first_seq = sequences[0]
-            data, metadata = load_extracted_sequence(
-                h5_path, 
-                first_seq['fov_idx'],
-                first_seq['pattern_idx'], 
-                first_seq['seq_idx']
-            )
-            
-            # Check data format
-            if len(data.shape) != 4:
-                logger.error(f"Expected 4D data (frames, channels, height, width), got shape {data.shape}")
+            data = self.load_cell_filter_data(
+                h5_path,
+                first_seq["fov_idx"],
+                first_seq["pattern_idx"],
+                first_seq["seq_idx"],
+                yaml_path,
+            )["data"]
+
+            if data.ndim != 4:
+                logger.error(f"Expected 4D data, got shape {data.shape}")
                 return False
-            
-            if data.shape[1] < 2:  # At least one image channel + segmentation
-                logger.error(f"Expected at least 2 channels (image + segmentation), got {data.shape[1]}")
+
+            if data.shape[1] < 1:
+                logger.error("Expected at least one image channel")
                 return False
-            
-            logger.info("H5 file validation passed")
+
             return True
-            
-        except Exception as e:
-            logger.error(f"H5 file validation failed: {e}")
+        except Exception as exc:
+            logger.error(f"H5 file validation failed: {exc}")
             return False

@@ -2,11 +2,11 @@
 Cell tracking functionality using btrack (Bayesian Tracker).
 """
 
-import numpy as np
-from typing import Dict, Optional
+
 import btrack
 import btrack.config
 import btrack.datasets
+import numpy as np
 from skimage import measure
 
 
@@ -21,8 +21,8 @@ class CellTracker:
     def __init__(
         self,
         search_radius: float = 100.0,
-        volume: Optional[tuple] = None,
-        config: Optional[str] = None,
+        volume: tuple | None = None,
+        config: str | None = None,
         min_area: float = 1000.0
     ):
         """
@@ -76,7 +76,7 @@ class CellTracker:
         self.masks.append(mask)
         self.frame_indices.append(frame_idx)
 
-    def track_all_frames(self) -> Dict[int, Dict[int, int]]:
+    def track_all_frames(self) -> dict[int, dict[int, int]]:
         """
         Run btrack on all accumulated frames and generate tracking maps.
 
@@ -92,7 +92,7 @@ class CellTracker:
         # We need to extract region properties for each labeled region in each frame
         objects = []
 
-        for t, (mask, frame_idx) in enumerate(zip(self.masks, self.frame_indices)):
+        for t, (mask, frame_idx) in enumerate(zip(self.masks, self.frame_indices, strict=False)):
             # Get region properties for this frame
             regions = measure.regionprops(mask)
 
@@ -217,7 +217,7 @@ class CellTracker:
                 if frame_idx in self._frame_to_tracking_map:
                     self._frame_to_tracking_map[frame_idx][local_label] = global_id
 
-    def get_tracking_map(self, frame_idx: int) -> Dict[int, int]:
+    def get_tracking_map(self, frame_idx: int) -> dict[int, int]:
         """
         Get tracking map for a specific frame.
 
@@ -233,7 +233,7 @@ class CellTracker:
         """
         return self._frame_to_tracking_map.get(frame_idx, {})
 
-    def create_tracked_mask(self, original_mask: np.ndarray, tracking_map: Dict[int, int]) -> np.ndarray:
+    def create_tracked_mask(self, original_mask: np.ndarray, tracking_map: dict[int, int]) -> np.ndarray:
         """
         Create a mask with global track IDs for consistent visualization.
 

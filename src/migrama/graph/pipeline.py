@@ -2,29 +2,35 @@
 Integrated pipeline for cell tracking, segmentation, and T1 transition analysis.
 """
 
-import numpy as np
 import os
-from typing import Dict, Optional, Any
+from typing import Any
 
-from .segmentation import SegmentationLoader
+import numpy as np
+
 from .adjacency import AdjacencyGraphBuilder
+from .analysis import T1TransitionAnalyzer, TopologyAnalyzer
+from .segmentation import SegmentationLoader
 from .tracking import CellTracker
 from .trajectory import TrajectoryAnalyzer
-from .visualization import CellVisualizationManager, plot_t1_transition_analysis, save_t1_data_csv, create_video_from_arrays
-from .analysis import T1TransitionAnalyzer, TopologyAnalyzer
 from .trajectory_visualization import plot_trajectory_visualizations
+from .visualization import (
+    CellVisualizationManager,
+    create_video_from_arrays,
+    plot_t1_transition_analysis,
+    save_t1_data_csv,
+)
 
 
 class CellTrackingPipeline:
     """
     Complete pipeline for cell tracking and T1 transition analysis using pre-computed segmentations.
     """
-    
+
     def __init__(
         self,
-        adjacency_params: Optional[Dict] = None,
-        tracking_params: Optional[Dict] = None,
-        trajectory_params: Optional[Dict] = None,
+        adjacency_params: dict | None = None,
+        tracking_params: dict | None = None,
+        trajectory_params: dict | None = None,
         nucleus_channel_name: str = 'cell_ch_1'
     ):
         """
@@ -66,7 +72,7 @@ class CellTrackingPipeline:
             'topology_data': [],
             'trajectory_data': []
         }
-    
+
     def reset(self):
         """Reset pipeline state for a new analysis."""
         self.tracker.reset()
@@ -81,13 +87,13 @@ class CellTrackingPipeline:
             'topology_data': [],
             'trajectory_data': []
         }
-    
+
     def process_frame(
         self,
         segmentation_mask: np.ndarray,
-        cell_image: Optional[np.ndarray] = None,
+        cell_image: np.ndarray | None = None,
         frame_idx: int = 0
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process a single frame through the complete pipeline.
         
@@ -107,23 +113,23 @@ class CellTrackingPipeline:
         """
         # Use pre-computed segmentation
         masks = segmentation_mask
-        
+
         # Tracking
         tracking_map = self.tracker.track_frame(masks)
         tracked_mask = self.tracker.create_tracked_mask(masks, tracking_map)
-        
+
         # Update visualization colors
         self.visualizer.update_color_map(tracking_map)
-        
+
         # Adjacency graph
         graph = self.graph_builder.build_graph(masks)
-        
+
         # T1 analysis
         t1_edge, t1_weight = self.t1_analyzer.find_t1_edge(graph)
-        
+
         # Topology analysis
         topology = self.topology_analyzer.analyze_cluster_topology(graph)
-        
+
         # Store results
         frame_result = {
             'frame_idx': frame_idx,
@@ -138,7 +144,7 @@ class CellTrackingPipeline:
             'num_edges': len(graph.edges()),
             'cell_image': cell_image
         }
-        
+
         # Update pipeline storage
         self.results['frames'].append(frame_idx)
         self.results['segmentations'].append(masks)
@@ -146,17 +152,17 @@ class CellTrackingPipeline:
         self.results['tracking_maps'].append(tracking_map)
         self.results['t1_data'].append(t1_weight)
         self.results['topology_data'].append(topology)
-        
+
         return frame_result
-    
+
     def process_cell_filter_data(
         self,
         npy_path: str,
-        yaml_path: Optional[str] = None,
-        start_frame: Optional[int] = None,
-        end_frame: Optional[int] = None,
+        yaml_path: str | None = None,
+        start_frame: int | None = None,
+        end_frame: int | None = None,
         output_dir: str = None
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process cell-filter timelapse data using pre-computed segmentations.
         
@@ -181,19 +187,19 @@ class CellTrackingPipeline:
         # Validate and load cell-filter data
         if not self.segmentation_loader.validate_cell_filter_output(npy_path, yaml_path):
             raise ValueError(f"Invalid cell-filter output format: {npy_path}")
-        
+
         cell_filter_data = self.segmentation_loader.load_cell_filter_data(npy_path, yaml_path)
-        
+
         # Extract cell channels for visualization
         cell_channels = self.segmentation_loader.get_cell_channels(cell_filter_data)
-        
+
         # Setup
         n_frames = len(cell_filter_data['segmentation_masks'])
         if start_frame is None:
             start_frame = 0
         if end_frame is None:
             end_frame = n_frames
-        
+
         os.makedirs(output_dir, exist_ok=True)
         self.reset()
 
@@ -306,7 +312,7 @@ class CellTrackingPipeline:
                 print(f"  T1 edge: {frame_result['t1_edge']} "
                       f"weight: {frame_result['t1_weight']:.1f}")
             print(f"  Tracking: {frame_result['tracking_map']}")
-        
+
         # Create video from frames
         try:
             video_path = create_video_from_arrays(
@@ -319,21 +325,21 @@ class CellTrackingPipeline:
         except Exception as e:
             print(f"Warning: Could not create video: {e}")
             video_path = None
-        
+
         # Generate summary analysis
         summary = self._generate_summary_analysis(output_dir, video_path)
-        
+
         print(f"\nCompleted! Analysis saved to {output_dir}/")
         return summary
-    
+
     def _create_frame_visualization_array(
         self,
-        frame_result: Dict[str, Any],
+        frame_result: dict[str, Any],
         frame_idx: int
     ) -> np.ndarray:
         """Create visualization frame as numpy array (in-memory, no PNG save)."""
         cell_image = frame_result.get('cell_image')
-        
+
         if cell_image is not None:
             if cell_image.ndim == 3:
                 # Multi-channel image
@@ -347,7 +353,7 @@ class CellTrackingPipeline:
             # No cell image available - use segmentation masks
             nuclei_image = np.zeros_like(frame_result['masks'])
             cytoplasm_image = np.zeros_like(frame_result['masks'])
-        
+
         # Use original mask with local labels for graph, but show tracked IDs
         segmentation_mask = frame_result['masks']  # Original with local labels
         tracking_map = frame_result['tracking_map']
@@ -364,7 +370,7 @@ class CellTrackingPipeline:
             t1_edge=t1_edge,
             frame_idx=frame_idx
         )
-        
+
         return fig_array
 
     def _save_trajectory_csv(self, csv_path: str):
@@ -388,7 +394,7 @@ class CellTrackingPipeline:
 
         print(f"Cell trajectories saved to {csv_path}")
 
-    def _generate_summary_analysis(self, output_dir: str, video_path: Optional[str] = None) -> Dict[str, Any]:
+    def _generate_summary_analysis(self, output_dir: str, video_path: str | None = None) -> dict[str, Any]:
         """Generate and save summary analysis."""
         # T1 transition analysis
         t1_plot_path = os.path.join(output_dir, 't1_transition_analysis.png')
@@ -422,7 +428,7 @@ class CellTrackingPipeline:
             self.results['graphs'],
             self.results['frames']
         )
-        
+
         # T1 event detection
         t1_events = self.t1_analyzer.detect_t1_events(
             self.results['t1_data'],
@@ -451,11 +457,11 @@ class CellTrackingPipeline:
         # Add trajectory plot paths if generated
         if trajectory_plots:
             summary['output_files'].update(trajectory_plots)
-        
+
         # Add video path if available
         if video_path:
             summary['output_files']['video'] = video_path
-        
+
         # Print summary
         print(f"T1 transition analysis plot saved to {t1_plot_path}")
         print(f"T1 edge weight range: {summary['t1_weight_range'][0]:.1f} - {summary['t1_weight_range'][1]:.1f}")
@@ -472,12 +478,12 @@ class CellTrackingPipeline:
 # Convenience function for quick analysis
 def analyze_cell_filter_data(
     npy_path: str,
-    yaml_path: Optional[str] = None,
-    start_frame: Optional[int] = None,
-    end_frame: Optional[int] = None,
+    yaml_path: str | None = None,
+    start_frame: int | None = None,
+    end_frame: int | None = None,
     output_dir: str = None,
     **pipeline_params
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Convenience function to analyze cell-filter data with pre-computed segmentations.
     
@@ -501,7 +507,7 @@ def analyze_cell_filter_data(
     """
     # Initialize pipeline
     pipeline = CellTrackingPipeline(**pipeline_params)
-    
+
     # Run analysis
     return pipeline.process_cell_filter_data(
         npy_path=npy_path,

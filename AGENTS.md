@@ -19,12 +19,12 @@ This is a monolithic Python package. Run commands from the repository root.
   - `python -m pytest tests/test_specific.py::test_function -v`
 
 ### Module Entry Points
-- **migrama pattern**: `migrama pattern detect` or `migrama pattern extract`
-- **migrama analyze**: `migrama analyze run --cells xxx.nd2 --h5 bounding_boxes.h5 --range 0:10`
-- **migrama extract**: `migrama extract run --cells xxx.nd2 --h5 bounding_boxes.h5 --n-cells 4`
-- **migrama graph**: `migrama graph analyze --input xxx.h5 --fov 0 --pattern 0 --sequence 0 --output ./output` or `migrama graph list-sequences --input xxx.h5`
-- **migrama tension**: `migrama tension run --mask xxx.npy`
-- **migrama viewer**: `migrama viewer launch`
+- **migrama pattern**: `migrama pattern -p patterns.nd2 -o patterns.csv`
+- **migrama analyze**: `migrama analyze -c cells.nd2 --csv patterns.csv -o analysis.csv --n-cells 4`
+- **migrama extract**: `migrama extract -c cells.nd2 --csv analysis.csv -o extracted.h5`
+- **migrama graph**: `migrama graph -i extracted.h5 --fov 0 --pattern 0 --sequence 0 -o ./output`
+- **migrama tension**: `migrama tension --mask xxx.npy`
+- **migrama viewer**: `migrama viewer`
 
 ## Code Style Guidelines
 
@@ -47,7 +47,7 @@ import matplotlib.pyplot as plt
 from cellpose import models
 
 # Local imports
-from migrama.core import Cropper, CropperParameters
+from migrama.core import PatternDetector, CellCropper
 ```
 
 ### Class Structure
@@ -57,7 +57,7 @@ from migrama.core import Cropper, CropperParameters
 - Prefer `raise ValueError("message")` over generic exceptions
 
 ### Naming Conventions
-- **Classes**: PascalCase (e.g., `CellposeCounter`, `Patterner`)
+- **Classes**: PascalCase (e.g., `CellposeCounter`, `PatternDetector`)
 - **Functions/variables**: snake_case
 - **Constants**: UPPER_SNAKE_CASE
 - **Private methods**: prefix with underscore (`_method_name`)
@@ -76,40 +76,48 @@ from migrama.core import Cropper, CropperParameters
 - **Test Guidelines**: Use assertions for validation, not specific numeric results for data-dependent tests
 - **Integration Tests**: May reference external data paths when implemented
 
-## Data Format Specifications
+## Pipeline Architecture
 
-### Pipeline H5 File Structure
-The pipeline uses a single cumulative H5 file that grows through three stages:
+The migrama pipeline processes micropatterned timelapse microscopy data through four stages:
 
-**Stage 1: migrama pattern extract** - Bounding boxes
-```
-/bounding_boxes/
-  fov_index, pattern_id, bbox_x, bbox_y, bbox_width, bbox_height,
-  center_x, center_y, area, patterns_path, cells_path, image_height, image_width
-/metadata/
-  total_fovs, total_patterns, processed_fovs, creation_time
-  fov_000/, fov_001/... (per-FOV attrs)
-```
+### Stage 1: Pattern Detection (`migrama pattern`)
+- **Input**: `patterns.nd2` (single-frame, single-channel pattern image)
+- **Output**: `patterns.csv` with columns: `cell,fov,x,y,w,h`
+  - `cell`: pattern index within FOV
+  - `fov`: field of view index
+  - `x,y,w,h`: bounding box coordinates
 
-**Stage 2: migrama analyze run** - Cell counts
-```
-/analysis/
-  fov_index, pattern_id, frame_index, cell_count (all int32 arrays)
-/analysis/metadata/
-  cells_path, nuclei_channel, min_size, processed_fovs, creation_time
-```
+### Stage 2: Cell Analysis (`migrama analyze`)
+- **Input**: `cells.nd2` + `patterns.csv`
+- **Output**: `analysis.csv` with columns: `cell,fov,x,y,w,h,t0,t1`
+  - `t0,t1`: longest contiguous frame range where target cell count is maintained
 
-**Stage 3: migrama extract run** - Cropped sequences
-```
-/extracted/
-  fov_{idx}/pattern_{idx}/seq_{idx}/
-    data (n_frames, n_channels+2, h, w)
-    channels (list of channel names)
-    start_frame, end_frame, bbox_x, bbox_y, bbox_width, bbox_height (attrs)
-/extracted attrs: n_cells, tolerance_gap, min_frames, cells_path, creation_time
-```
+### Stage 3: Sequence Extraction (`migrama extract`)
+- **Input**: `cells.nd2` + `analysis.csv`
+- **Output**: `extracted.h5` containing:
+  - Cropped timelapse sequences
+  - Tracked nuclei masks
+  - Tracked cell masks aligned to nuclei IDs
 
-### Cell-Grapher Input Requirements
-- Migrama H5 file with extracted sequences containing segmentation channel (last channel)
-- Optional YAML metadata file for channel information
-- Segmentation masks should have local cell IDs (background=0, cells=1,2,3...)
+### Stage 4: Graph Analysis (`migrama graph`)
+- **Input**: `extracted.h5` (tracked segmentation layer)
+- **Output**: Region adjacency networks, T1 transition analysis
+
+## Core Classes
+
+### Pattern Detection
+- `PatternDetector`: Detects patterns from ND2 files, outputs CSV
+- `DetectorParameters`: Configuration for detection algorithm
+
+### Cell Cropping
+- `CellCropper`: Loads cells.nd2 + CSV, provides cropping methods
+- `BoundingBox`: Dataclass for bounding box coordinates
+- `load_bboxes_csv()`: Utility to load CSV into dict[fov, list[BoundingBox]]
+
+### Segmentation & Tracking
+- `CellposeCounter`: Counts cells in images
+- `CellposeSegmenter`: Segments cells using Cellpose
+- `CellTracker`: Tracks cells across frames
+
+### Graph Analysis
+- `CellGrapher`: Builds and analyzes region adjacency graphs

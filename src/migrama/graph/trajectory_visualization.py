@@ -2,16 +2,16 @@
 Visualization functions for cell trajectories (nucleus vs cytoplasm).
 """
 
-import numpy as np
-import matplotlib.pyplot as plt
-from typing import Dict, Optional, Tuple
+
 import matplotlib.cm as cm
+import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_nucleus_cytoplasm_trajectories(
-    trajectories: Dict[int, Dict],
+    trajectories: dict[int, dict],
     output_path: str,
-    figsize: Tuple[int, int] = (12, 10)
+    figsize: tuple[int, int] = (12, 10)
 ):
     """
     Plot nucleus and cytoplasm trajectories together for comparison.
@@ -88,13 +88,13 @@ def plot_nucleus_cytoplasm_trajectories(
             continue
         from matplotlib.lines import Line2D
         legend_elements.append(
-            Line2D([0], [0], color=colors[idx], lw=2, 
+            Line2D([0], [0], color=colors[idx], lw=2,
                    label=f'Cell {global_id}')
         )
-    
+
     if legend_elements:
-        ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1), 
-                  loc='upper left', fontsize=8, ncol=1, 
+        ax.legend(handles=legend_elements, bbox_to_anchor=(1.05, 1),
+                  loc='upper left', fontsize=8, ncol=1,
                   title='Cells (Solid=Nucleus, Dashed=Cytoplasm)')
 
     plt.tight_layout()
@@ -104,10 +104,10 @@ def plot_nucleus_cytoplasm_trajectories(
 
 
 def plot_polar_coordinates(
-    trajectories: Dict[int, Dict],
+    trajectories: dict[int, dict],
     output_path: str,
-    origin: Optional[Tuple[float, float]] = None,
-    figsize: Tuple[int, int] = (16, 6)
+    origin: tuple[float, float] | None = None,
+    figsize: tuple[int, int] = (16, 6)
 ):
     """
     Plot r and theta vs time for nucleus and cytoplasm (2 subplots: r and theta).
@@ -193,10 +193,10 @@ def plot_polar_coordinates(
             continue
         from matplotlib.lines import Line2D
         legend_elements.append(
-            Line2D([0], [0], color=colors[idx], lw=2, 
+            Line2D([0], [0], color=colors[idx], lw=2,
                    label=f'Cell {global_id}')
         )
-    
+
     if legend_elements:
         # Add legend to the right subplot only to avoid duplication
         ax2.legend(handles=legend_elements, fontsize=7, ncol=2,
@@ -211,9 +211,9 @@ def plot_polar_coordinates(
 
 
 def plot_trajectory_visualizations(
-    trajectories: Dict[int, Dict],
+    trajectories: dict[int, dict],
     output_dir: str,
-    origin: Optional[Tuple[float, float]] = None
+    origin: tuple[float, float] | None = None
 ):
     """
     Generate trajectory visualization plots (2 plots only).

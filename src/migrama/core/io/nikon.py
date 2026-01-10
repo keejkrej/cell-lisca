@@ -3,9 +3,10 @@ ND2 file loading utilities for microscopy data.
 """
 
 from dataclasses import dataclass
-import numpy as np
 from pathlib import Path
+
 import nd2
+import numpy as np
 import xarray as xr
 
 
