@@ -36,6 +36,7 @@ dependencies = [
     "pyyaml>=6.0.2",
     # Viewer dependencies
     "PySide6",
+    "psygnal>=0.15.1",
 ]
 
 [project.scripts]
