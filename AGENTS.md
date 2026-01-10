@@ -20,11 +20,11 @@ This is a monolithic Python package. Run commands from the repository root.
 
 ### Module Entry Points
 - **migrama pattern**: `migrama pattern detect` or `migrama pattern extract`
-- **migrama filter**: `migrama filter analysis`
-- **migrama extract**: `migrama extract`
+- **migrama analyze**: `migrama analyze run --cells xxx.nd2 --h5 bounding_boxes.h5 --range 0:10`
+- **migrama extract**: `migrama extract run --cells xxx.nd2 --h5 bounding_boxes.h5 --n-cells 4`
 - **migrama graph**: `migrama graph analyze --input xxx.h5 --fov 0 --pattern 0 --sequence 0 --output ./output` or `migrama graph list-sequences --input xxx.h5`
 - **migrama tension**: `migrama tension run --mask xxx.npy`
-- **migrama viewer**: `migrama viewer`
+- **migrama viewer**: `migrama viewer launch`
 
 ## Code Style Guidelines
 
@@ -91,7 +91,7 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
   fov_000/, fov_001/... (per-FOV attrs)
 ```
 
-**Stage 2: migrama filter analysis** - Cell counts
+**Stage 2: migrama analyze run** - Cell counts
 ```
 /analysis/
   fov_index, pattern_id, frame_index, cell_count (all int32 arrays)
@@ -99,7 +99,7 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
   cells_path, nuclei_channel, min_size, processed_fovs, creation_time
 ```
 
-**Stage 3: migrama extract** - Cropped sequences
+**Stage 3: migrama extract run** - Cropped sequences
 ```
 /extracted/
   fov_{idx}/pattern_{idx}/seq_{idx}/
@@ -110,6 +110,6 @@ The pipeline uses a single cumulative H5 file that grows through three stages:
 ```
 
 ### Cell-Grapher Input Requirements
-- Migrama filter NPY file with segmentation channel (last channel)
+- Migrama H5 file with extracted sequences containing segmentation channel (last channel)
 - Optional YAML metadata file for channel information
 - Segmentation masks should have local cell IDs (background=0, cells=1,2,3...)

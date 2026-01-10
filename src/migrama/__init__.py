@@ -2,18 +2,12 @@
 
 __version__ = "0.1.0"
 
-from . import core
-from . import pattern
-from . import filter
-from . import extract
-from . import graph
-from . import tension
-from . import viewer
+from . import analyze, core, extract, graph, pattern, tension, viewer
 
 __all__ = [
     "core",
-    "pattern", 
-    "filter",
+    "pattern",
+    "analyze",
     "extract",
     "graph",
     "tension",
