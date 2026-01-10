@@ -1,54 +1,33 @@
-"""Sequence extraction with segmentation and tracking."""
+"""Convert TIFF files to H5 with segmentation and tracking."""
 
-import csv
 import logging
-from dataclasses import dataclass
 from pathlib import Path
 
 import h5py
 import numpy as np
+import tifffile
 
 from ..core import CellposeSegmenter, CellTracker
-from ..core.pattern import CellCropper
 
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class AnalysisRow:
-    """Row from analysis CSV."""
-
-    cell: int
-    fov: int
-    x: int
-    y: int
-    w: int
-    h: int
-    t0: int
-    t1: int
-
-
-class Extractor:
-    """Extract sequences with segmentation and tracking."""
-
-    # Constructor
+class Converter:
+    """Convert TIFF files to H5 with segmentation and tracking."""
 
     def __init__(
         self,
-        cells_path: str,
-        analysis_csv: str,
+        input_folder: str,
         output_path: str,
-        nuclei_channel: int = 1,
-        cell_channel: int = 0,
+        nuclei_channel: int = 0,
+        cell_channel: int = 1,
     ) -> None:
-        """Initialize extractor.
+        """Initialize converter.
 
         Parameters
         ----------
-        cells_path : str
-            Path to cells ND2 file
-        analysis_csv : str
-            Path to analysis CSV file
+        input_folder : str
+            Path to folder containing TIFF files
         output_path : str
             Output H5 file path
         nuclei_channel : int
@@ -56,55 +35,44 @@ class Extractor:
         cell_channel : int
             Channel index for cell bodies
         """
-        self.cells_path = Path(cells_path).resolve()
-        self.analysis_csv = Path(analysis_csv).resolve()
+        self.input_folder = Path(input_folder).resolve()
         self.output_path = Path(output_path).resolve()
         self.nuclei_channel = nuclei_channel
         self.cell_channel = cell_channel
 
-        self.cropper = CellCropper(
-            cells_path=str(self.cells_path),
-            bboxes_csv=str(self.analysis_csv),
-            nuclei_channel=nuclei_channel,
-        )
         self.segmenter = CellposeSegmenter()
 
-    def extract(self, min_frames: int = 1) -> int:
-        """Extract sequences to H5.
+    def convert(self, min_frames: int = 1) -> int:
+        """Convert TIFF files to H5.
 
         Parameters
         ----------
         min_frames : int
-            Minimum frames required to extract a sequence
+            Minimum frames required to process a sequence
 
         Returns
         -------
         int
-            Number of sequences extracted
+            Number of sequences written
         """
-        rows = self._load_analysis_rows(self.analysis_csv)
+        tiff_paths = sorted(self.input_folder.glob("*.tif*"))
+        if not tiff_paths:
+            raise FileNotFoundError(f"No TIFF files found in {self.input_folder}")
+
         sequences_written = 0
 
         with h5py.File(self.output_path, "w") as h5file:
-            h5file.attrs["cells_path"] = str(self.cells_path)
+            h5file.attrs["input_folder"] = str(self.input_folder)
             h5file.attrs["nuclei_channel"] = self.nuclei_channel
             h5file.attrs["cell_channel"] = self.cell_channel
 
-            for row in rows:
-                if row.t0 < 0 or row.t1 < row.t0:
-                    continue
+            for cell_idx, tiff_path in enumerate(tiff_paths):
+                timelapse = self._load_timelapse(tiff_path)
 
-                n_frames = row.t1 - row.t0 + 1
+                n_frames = timelapse.shape[0]
                 if n_frames < min_frames:
+                    logger.info(f"Skipping {tiff_path.name}: only {n_frames} frames")
                     continue
-
-                timelapse = self.cropper.extract_timelapse(
-                    row.fov,
-                    row.cell,
-                    start_frame=row.t0,
-                    end_frame=row.t1 + 1,
-                    channels=None,
-                )
 
                 nuclei_masks = self._segment_channel(timelapse, self.nuclei_channel)
                 cell_masks = self._segment_channel(timelapse, self.cell_channel)
@@ -123,38 +91,36 @@ class Extractor:
 
                 self._write_sequence(
                     h5file,
-                    row,
+                    cell_idx,
                     timelapse,
                     np.stack(tracked_nuclei_masks),
                     np.stack(tracked_cell_masks),
                 )
                 sequences_written += 1
+                logger.info(f"Processed {tiff_path.name} -> cell_{cell_idx}")
 
         logger.info(f"Saved {sequences_written} sequences to {self.output_path}")
         return sequences_written
 
-    # Private Methods
+    def _load_timelapse(self, tiff_path: Path) -> np.ndarray:
+        """Load a TIFF stack as timelapse array (t, c, y, x)."""
+        with tifffile.TiffFile(tiff_path) as tif:
+            data = tif.asarray()
 
-    @staticmethod
-    def _load_analysis_rows(csv_path: Path) -> list[AnalysisRow]:
-        """Load analysis CSV rows."""
-        rows: list[AnalysisRow] = []
-        with open(csv_path, newline="") as csvfile:
-            reader = csv.DictReader(csvfile)
-            for row in reader:
-                rows.append(
-                    AnalysisRow(
-                        cell=int(row["cell"]),
-                        fov=int(row["fov"]),
-                        x=int(row["x"]),
-                        y=int(row["y"]),
-                        w=int(row["w"]),
-                        h=int(row["h"]),
-                        t0=int(row["t0"]),
-                        t1=int(row["t1"]),
-                    )
-                )
-        return rows
+        if data.ndim == 2:
+            data = data[np.newaxis, np.newaxis, ...]
+        elif data.ndim == 3:
+            data = np.expand_dims(data, axis=1)
+        elif data.ndim == 4:
+            pass
+        else:
+            raise ValueError(f"Unexpected TIFF shape: {data.shape}, expected 2-4 dimensions")
+
+        if data.shape[1] < 2:
+            raise ValueError(f"TIFF must have at least 2 channels, got {data.shape[1]}")
+
+        logger.debug(f"Loaded {tiff_path.name}: shape {data.shape}")
+        return data
 
     def _segment_channel(self, timelapse: np.ndarray, channel_idx: int) -> list[np.ndarray]:
         """Segment a single channel across frames."""
@@ -186,23 +152,25 @@ class Extractor:
     def _write_sequence(
         self,
         h5file: h5py.File,
-        row: AnalysisRow,
+        cell_idx: int,
         timelapse: np.ndarray,
         nuclei_masks: np.ndarray,
         cell_masks: np.ndarray,
     ) -> None:
         """Write sequence data to H5."""
-        fov_group = h5file.require_group(f"fov_{row.fov}")
-        cell_group = fov_group.require_group(f"cell_{row.cell}")
+        fov_group = h5file.require_group("fov_0")
+        cell_group = fov_group.require_group(f"cell_{cell_idx}")
         seq_group = cell_group.require_group("sequence_0")
 
         seq_group.create_dataset("data", data=timelapse, compression="gzip")
         seq_group.create_dataset("nuclei_masks", data=nuclei_masks, compression="gzip")
         seq_group.create_dataset("cell_masks", data=cell_masks, compression="gzip")
 
-        channels = self.cropper.channel_names or [f"channel_{i}" for i in range(timelapse.shape[1])]
+        n_channels = timelapse.shape[1]
+        channels = [f"channel_{i}" for i in range(n_channels)]
         seq_group.create_dataset("channels", data=np.array(channels, dtype="S"))
 
-        seq_group.attrs["t0"] = row.t0
-        seq_group.attrs["t1"] = row.t1
-        seq_group.attrs["bbox"] = np.array([row.x, row.y, row.w, row.h], dtype=np.int32)
+        dummy_bbox = np.array([-1, -1, -1, -1], dtype=np.int32)
+        seq_group.attrs["t0"] = -1
+        seq_group.attrs["t1"] = -1
+        seq_group.attrs["bbox"] = dummy_bbox

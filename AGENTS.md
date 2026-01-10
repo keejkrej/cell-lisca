@@ -22,6 +22,8 @@ This is a monolithic Python package. Run commands from the repository root.
 - **migrama pattern**: `migrama pattern -p patterns.nd2 -o patterns.csv`
 - **migrama analyze**: `migrama analyze -c cells.nd2 --csv patterns.csv -o analysis.csv --n-cells 4`
 - **migrama extract**: `migrama extract -c cells.nd2 --csv analysis.csv -o extracted.h5`
+- **migrama convert**: `migrama convert -i tiff_folder/ -o converted.h5 --nuclei-channel 0 --cell-channel 1`
+- **migrama info**: `migrama info -i extracted.h5`
 - **migrama graph**: `migrama graph -i extracted.h5 --fov 0 --pattern 0 --sequence 0 -o ./output`
 - **migrama tension**: `migrama tension --mask xxx.npy`
 - **migrama viewer**: `migrama viewer`

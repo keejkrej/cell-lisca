@@ -122,10 +122,10 @@ class PatternDetector:
             min_area = self.parameters.min_area_ratio * mean_area
             max_area = self.parameters.max_area_ratio * mean_area
 
-            filtered = [(c, a) for c, a in zip(current_contours, current_areas) if min_area <= a <= max_area]
+            filtered = [(c, a) for c, a in zip(current_contours, current_areas, strict=False) if min_area <= a <= max_area]
             if not filtered:
                 break
-            current_contours, current_areas = zip(*filtered)
+            current_contours, current_areas = zip(*filtered, strict=False)
             current_contours = list(current_contours)
             current_areas = np.array(current_areas)
 

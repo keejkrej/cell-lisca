@@ -45,7 +45,7 @@ def analyze(
     cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
     csv: str = typer.Option(..., "--csv", help="Path to patterns CSV file"),
     output: str = typer.Option("./analysis.csv", "--output", "-o", help="Output CSV file path"),
-    nuclei_channel: int = typer.Option(1, "--nuclei-channel", help="Channel index for nuclei"),
+    nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
     n_cells: int = typer.Option(4, "--n-cells", help="Target number of cells per pattern"),
     min_size: int = typer.Option(15, "--min-size", help="Minimum object size for Cellpose"),
     debug: bool = typer.Option(False, "--debug"),
@@ -72,8 +72,8 @@ def extract(
     cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
     csv: str = typer.Option(..., "--csv", help="Path to analysis CSV file"),
     output: str = typer.Option("./extracted.h5", "--output", "-o", help="Output H5 file path"),
-    nuclei_channel: int = typer.Option(1, "--nuclei-channel", help="Channel index for nuclei"),
-    cell_channel: int = typer.Option(0, "--cell-channel", help="Channel index for cell bodies"),
+    nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
+    cell_channel: int = typer.Option(0, "--cc", help="Channel index for cell bodies"),
     min_frames: int = typer.Option(1, "--min-frames", help="Minimum frames per sequence"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -91,6 +91,31 @@ def extract(
         cell_channel=cell_channel,
     )
     sequences = extractor.extract(min_frames=min_frames)
+    typer.echo(f"Saved {sequences} sequences to {output}")
+
+
+@app.command()
+def convert(
+    input_folder: str = typer.Option(..., "--input", "-i", help="Path to folder with TIFF files"),
+    output: str = typer.Option("./converted.h5", "--output", "-o", help="Output H5 file path"),
+    nuclei_channel: int = typer.Option(0, "--nc", help="Channel index for nuclei"),
+    cell_channel: int = typer.Option(1, "--cc", help="Channel index for cell bodies"),
+    min_frames: int = typer.Option(1, "--min-frames", help="Minimum frames per sequence"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Convert TIFF files to H5 with segmentation and tracking."""
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    from ..convert import Converter
+
+    converter = Converter(
+        input_folder=input_folder,
+        output_path=output,
+        nuclei_channel=nuclei_channel,
+        cell_channel=cell_channel,
+    )
+    sequences = converter.convert(min_frames=min_frames)
     typer.echo(f"Saved {sequences} sequences to {output}")
 
 
@@ -204,6 +229,33 @@ def tension(
         typer.echo(f"VMSI model saved to {output}")
     else:
         typer.echo("VMSI analysis completed (model not saved)")
+
+
+@app.command()
+def info(
+    input: str = typer.Option(..., "--input", "-i", help="Path to H5 file"),
+):
+    """Print H5 file structure."""
+    import h5py
+
+    path = Path(input)
+    if not path.exists():
+        typer.echo(f"Error: File not found: {input}", err=True)
+        raise typer.Exit(1)
+
+    def print_structure(name, obj):
+        indent = "  " * name.count("/")
+        if isinstance(obj, h5py.Dataset):
+            typer.echo(f"{indent}{name}: dataset {obj.shape} {obj.dtype}")
+        elif isinstance(obj, h5py.Group):
+            typer.echo(f"{indent}{name}/ (group)")
+            for k, v in obj.attrs.items():
+                typer.echo(f"{indent}  attr {k}: {v}")
+
+    with h5py.File(path, "r") as f:
+        typer.echo(f"H5 Structure: {path}")
+        typer.echo("-" * 60)
+        f.visititems(print_structure)
 
 
 @app.command()
