@@ -151,72 +151,73 @@ def convert(
         raise
 
 
-@app.command()
-def graph(
-    input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with segmentation data"),
-    output: str = typer.Option(..., "--output", "-o", help="Output directory for analysis results"),
-    fov: int = typer.Option(..., "--fov", help="FOV index"),
-    pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
-    sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
-    start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame"),
-    end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive)"),
-    search_radius: float = typer.Option(100.0, "--search-radius", help="Max search radius for tracking"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Create region adjacency graphs and analyze T1 transitions."""
-    import os
-    import tempfile
-
-    import numpy as np
-    import yaml as yaml_module
-
-    log_level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
-
-    if not Path(input).exists():
-        typer.echo(f"Error: Input file does not exist: {input}", err=True)
-        raise typer.Exit(1)
-
-    from ..graph.h5_loader import H5SegmentationLoader
-    from ..graph.pipeline import analyze_cell_filter_data
-
-    loader = H5SegmentationLoader()
-
-    typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
-    loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
-    data = cast(np.ndarray, loaded_data["data"])
-    segmentation_masks = cast(np.ndarray, loaded_data["segmentation_masks"])
-
-    # Create temporary NPY file for pipeline compatibility
-    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
-        combined_data = np.concatenate([data, segmentation_masks[:, np.newaxis, :, :]], axis=1)
-        np.save(tmp.name, combined_data)
-        tmp_npy_path = tmp.name
-
-    tmp_yaml_path = None
-    if loaded_data["metadata"]:
-        tmp_yaml_path = tmp_npy_path.replace(".npy", ".yaml")
-        with open(tmp_yaml_path, "w") as f:
-            yaml_module.dump(loaded_data["metadata"], f)
-
-    try:
-        results = analyze_cell_filter_data(
-            npy_path=tmp_npy_path,
-            yaml_path=tmp_yaml_path,
-            output_dir=output,
-            start_frame=start_frame,
-            end_frame=end_frame,
-            tracking_params={"search_radius": search_radius},
-        )
-
-        typer.echo(f"\nAnalysis complete: {results['total_frames']} frames, {results['t1_events_detected']} T1 events")
-        for file_type, path in results["output_files"].items():
-            typer.echo(f"  {file_type}: {path}")
-
-    finally:
-        os.unlink(tmp_npy_path)
-        if tmp_yaml_path and os.path.exists(tmp_yaml_path):
-            os.unlink(tmp_yaml_path)
+# Graph command disabled - being redesigned
+# @app.command()
+# def graph(
+#     input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with segmentation data"),
+#     output: str = typer.Option(..., "--output", "-o", help="Output directory for analysis results"),
+#     fov: int = typer.Option(..., "--fov", help="FOV index"),
+#     pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
+#     sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
+#     start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame"),
+#     end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive)"),
+#     search_radius: float = typer.Option(100.0, "--search-radius", help="Max search radius for tracking"),
+#     debug: bool = typer.Option(False, "--debug"),
+# ):
+#     """Create region adjacency graphs and analyze T1 transitions."""
+#     import os
+#     import tempfile
+#
+#     import numpy as np
+#     import yaml as yaml_module
+#
+#     log_level = logging.DEBUG if debug else logging.INFO
+#     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+#
+#     if not Path(input).exists():
+#         typer.echo(f"Error: Input file does not exist: {input}", err=True)
+#         raise typer.Exit(1)
+#
+#     from ..graph.h5_loader import H5SegmentationLoader
+#     from ..graph.pipeline import analyze_cell_filter_data
+#
+#     loader = H5SegmentationLoader()
+#
+#     typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
+#     loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
+#     data = cast(np.ndarray, loaded_data["data"])
+#     segmentation_masks = cast(np.ndarray, loaded_data["segmentation_masks"])
+#
+#     # Create temporary NPY file for pipeline compatibility
+#     with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
+#         combined_data = np.concatenate([data, segmentation_masks[:, np.newaxis, :, :]], axis=1)
+#         np.save(tmp.name, combined_data)
+#         tmp_npy_path = tmp.name
+#
+#     tmp_yaml_path = None
+#     if loaded_data["metadata"]:
+#         tmp_yaml_path = tmp_npy_path.replace(".npy", ".yaml")
+#         with open(tmp_yaml_path, "w") as f:
+#             yaml_module.dump(loaded_data["metadata"], f)
+#
+#     try:
+#         results = analyze_cell_filter_data(
+#             npy_path=tmp_npy_path,
+#             yaml_path=tmp_yaml_path,
+#             output_dir=output,
+#             start_frame=start_frame,
+#             end_frame=end_frame,
+#             tracking_params={"search_radius": search_radius},
+#         )
+#
+#         typer.echo(f"\nAnalysis complete: {results['total_frames']} frames, {results['t1_events_detected']} T1 events")
+#         for file_type, path in results["output_files"].items():
+#             typer.echo(f"  {file_type}: {path}")
+#
+#     finally:
+#         os.unlink(tmp_npy_path)
+#         if tmp_yaml_path and os.path.exists(tmp_yaml_path):
+#             os.unlink(tmp_yaml_path)
 
 
 @app.command()

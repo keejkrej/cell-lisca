@@ -26,9 +26,8 @@ dependencies = [
     "scikit-image",
     "scipy",
     "tifffile",
-    # Graph and tracking dependencies
+    # Graph dependencies
     "networkx",
-    "btrack",
     # Pattern detection dependencies
     "nd2",
     "xarray",
