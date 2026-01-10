@@ -6,6 +6,7 @@ from pathlib import Path
 import h5py
 import numpy as np
 import tifffile
+from skimage.filters import threshold_otsu
 
 from ..core import CellposeSegmenter, CellTracker
 
@@ -20,7 +21,6 @@ class Converter:
         input_folder: str,
         output_path: str,
         nuclei_channel: int = 0,
-        cell_channel: int = 1,
     ) -> None:
         """Initialize converter.
 
@@ -32,13 +32,10 @@ class Converter:
             Output H5 file path
         nuclei_channel : int
             Channel index for nuclei
-        cell_channel : int
-            Channel index for cell bodies
         """
         self.input_folder = Path(input_folder).resolve()
         self.output_path = Path(output_path).resolve()
         self.nuclei_channel = nuclei_channel
-        self.cell_channel = cell_channel
 
         self.segmenter = CellposeSegmenter()
 
@@ -64,7 +61,6 @@ class Converter:
         with h5py.File(self.output_path, "w") as h5file:
             h5file.attrs["input_folder"] = str(self.input_folder)
             h5file.attrs["nuclei_channel"] = self.nuclei_channel
-            h5file.attrs["cell_channel"] = self.cell_channel
 
             for cell_idx, tiff_path in enumerate(tiff_paths):
                 timelapse = self._load_timelapse(tiff_path)
@@ -74,26 +70,22 @@ class Converter:
                     logger.info(f"Skipping {tiff_path.name}: only {n_frames} frames")
                     continue
 
-                nuclei_masks = self._segment_channel(timelapse, self.nuclei_channel)
-                cell_masks = self._segment_channel(timelapse, self.cell_channel)
+                cell_masks = self._segment_timelapse(timelapse)
 
                 tracker = CellTracker()
-                tracking_maps = tracker.track_frames(nuclei_masks)
-                tracked_nuclei_masks = [
+                tracking_maps = tracker.track_frames(cell_masks)
+                tracked_cell_masks = [
                     tracker.get_tracked_mask(mask, track_map)
-                    for mask, track_map in zip(nuclei_masks, tracking_maps, strict=False)
+                    for mask, track_map in zip(cell_masks, tracking_maps, strict=False)
                 ]
 
-                tracked_cell_masks = [
-                    self._map_cells_to_tracks(cell_mask, tracked_nuclei_mask)
-                    for cell_mask, tracked_nuclei_mask in zip(cell_masks, tracked_nuclei_masks, strict=False)
-                ]
+                nuclei_masks = self._build_nuclei_masks(timelapse, tracked_cell_masks, tracking_maps)
 
                 self._write_sequence(
                     h5file,
                     cell_idx,
                     timelapse,
-                    np.stack(tracked_nuclei_masks),
+                    np.stack(nuclei_masks),
                     np.stack(tracked_cell_masks),
                 )
                 sequences_written += 1
@@ -116,38 +108,55 @@ class Converter:
         else:
             raise ValueError(f"Unexpected TIFF shape: {data.shape}, expected 2-4 dimensions")
 
-        if data.shape[1] < 2:
-            raise ValueError(f"TIFF must have at least 2 channels, got {data.shape[1]}")
+        if data.shape[1] < 1:
+            raise ValueError(f"TIFF must have at least 1 channel, got {data.shape[1]}")
 
         logger.debug(f"Loaded {tiff_path.name}: shape {data.shape}")
         return data
 
-    def _segment_channel(self, timelapse: np.ndarray, channel_idx: int) -> list[np.ndarray]:
-        """Segment a single channel across frames."""
+    def _segment_timelapse(self, timelapse: np.ndarray) -> list[np.ndarray]:
+        """Segment all channels together across frames using Cellpose."""
         masks = []
         for frame_idx in range(timelapse.shape[0]):
-            image = timelapse[frame_idx, channel_idx]
-            result = self.segmenter.segment_image(image)
+            frame_data = timelapse[frame_idx]
+            if frame_data.ndim == 3 and frame_data.shape[0] <= 3:
+                frame_data = np.transpose(frame_data, (1, 2, 0))
+            result = self.segmenter.segment_image(frame_data)
             masks.append(result["masks"])
         return masks
 
-    @staticmethod
-    def _map_cells_to_tracks(cell_mask: np.ndarray, tracked_nuclei_mask: np.ndarray) -> np.ndarray:
-        """Assign cell labels to tracked nuclei IDs by overlap."""
-        tracked_cells = np.zeros_like(cell_mask, dtype=np.int32)
-        cell_labels = np.unique(cell_mask)
-        cell_labels = cell_labels[cell_labels != 0]
+    def _build_nuclei_masks(
+        self,
+        timelapse: np.ndarray,
+        tracked_cell_masks: list[np.ndarray],
+        tracking_maps: list[dict[int, int]],
+    ) -> list[np.ndarray]:
+        """Build nuclei masks by Otsu thresholding nuclei channel inside each cell."""
+        nuclei_masks = []
+        for frame_idx, (cell_mask, track_map) in enumerate(zip(tracked_cell_masks, tracking_maps, strict=False)):
+            nuclei_mask = np.zeros_like(cell_mask, dtype=np.int32)
+            nuclei_channel_img = timelapse[frame_idx, self.nuclei_channel]
 
-        for cell_label in cell_labels:
-            overlap_ids = tracked_nuclei_mask[cell_mask == cell_label]
-            overlap_ids = overlap_ids[overlap_ids != 0]
-            if overlap_ids.size == 0:
-                continue
-            unique_ids, counts = np.unique(overlap_ids, return_counts=True)
-            track_id = int(unique_ids[np.argmax(counts)])
-            tracked_cells[cell_mask == cell_label] = track_id
+            for track_id in track_map.values():
+                cell_pixels = cell_mask == track_id
+                if not np.any(cell_pixels):
+                    continue
 
-        return tracked_cells
+                cell_intensities = nuclei_channel_img[cell_pixels]
+                if cell_intensities.size == 0:
+                    continue
+
+                try:
+                    thresh = threshold_otsu(cell_intensities)
+                except ValueError:
+                    thresh = None
+
+                if thresh is not None:
+                    nuclei_pixels = cell_pixels & (nuclei_channel_img > thresh)
+                    nuclei_mask[nuclei_pixels] = track_id
+
+            nuclei_masks.append(nuclei_mask)
+        return nuclei_masks
 
     def _write_sequence(
         self,

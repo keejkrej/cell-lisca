@@ -99,7 +99,6 @@ def convert(
     input_folder: str = typer.Option(..., "--input", "-i", help="Path to folder with TIFF files"),
     output: str = typer.Option("./converted.h5", "--output", "-o", help="Output H5 file path"),
     nuclei_channel: int = typer.Option(0, "--nc", help="Channel index for nuclei"),
-    cell_channel: int = typer.Option(1, "--cc", help="Channel index for cell bodies"),
     min_frames: int = typer.Option(1, "--min-frames", help="Minimum frames per sequence"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -113,7 +112,6 @@ def convert(
         input_folder=input_folder,
         output_path=output,
         nuclei_channel=nuclei_channel,
-        cell_channel=cell_channel,
     )
     sequences = converter.convert(min_frames=min_frames)
     typer.echo(f"Saved {sequences} sequences to {output}")
