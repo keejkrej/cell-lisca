@@ -288,6 +288,8 @@ def graph(
         typer.echo(f"Error: Input file does not exist: {input}", err=True)
         raise typer.Exit(1)
 
+    from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
+
     from ..graph.adjacency import BoundaryPixelTracker
     from ..graph.h5_loader import H5SegmentationLoader
 
@@ -316,19 +318,38 @@ def graph(
 
     typer.echo(f"Processing frames {start} to {end - 1} ({end - start} frames)")
 
-    for frame_idx in range(start, end):
-        mask = segmentation_masks[frame_idx]
-        nuclei_mask_frame = nuclei_masks[frame_idx] if nuclei_masks is not None else None
-        boundaries = tracker.extract_boundaries(mask)
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    progress.start()
 
-        if plot:
-            fig, _ = tracker.plot_4panel_figure(mask, nuclei_mask_frame, boundaries, frame_idx)
-            out_path = output_dir / f"frame_{frame_idx:04d}.png"
-            fig.savefig(out_path, dpi=150, bbox_inches="tight")
-            plt.close(fig)
-            typer.echo(f"  Saved: {out_path}")
+    n_total = end - start
+    plot_task: TaskID | None = None
+    if plot:
+        plot_task = progress.add_task("Generating plots", total=n_total)
 
-    typer.echo(f"Done. Output saved to {output_dir}")
+    try:
+        for frame_idx in range(start, end):
+            mask = segmentation_masks[frame_idx]
+            nuclei_mask_frame = nuclei_masks[frame_idx] if nuclei_masks is not None else None
+            boundaries = tracker.extract_boundaries(mask)
+
+            if plot and plot_task is not None:
+                fig, _ = tracker.plot_4panel_figure(mask, nuclei_mask_frame, boundaries, frame_idx)
+                out_path = output_dir / f"frame_{frame_idx:04d}.png"
+                fig.savefig(out_path, dpi=150, bbox_inches="tight")
+                plt.close(fig)
+                progress.update(plot_task, completed=frame_idx - start + 1)
+
+        progress.stop()
+        typer.echo(f"Done. Output saved to {output_dir}")
+    except Exception:
+        progress.stop()
+        raise
 
 
 @app.command()

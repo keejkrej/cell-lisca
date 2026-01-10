@@ -357,7 +357,7 @@ class BoundaryPixelTracker:
     def plot_4panel_figure(
         self,
         cell_mask: np.ndarray,
-        nuclei_mask: np.ndarray,
+        nuclei_mask: np.ndarray | None,
         boundaries: dict[tuple[int, ...], np.ndarray],
         frame_idx: int = 0,
     ) -> tuple[Figure, np.ndarray]:
