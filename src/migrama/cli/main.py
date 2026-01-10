@@ -12,17 +12,38 @@ app = typer.Typer(help="Migrama: A comprehensive toolkit for micropatterned time
 
 @app.command()
 def pattern(
-    patterns: str = typer.Option(..., "--patterns", "-p", help="Path to patterns ND2 file"),
+    patterns: str | None = typer.Option(
+        None, "--patterns", "-p", help="Path to patterns ND2 file or folder with averaged TIFFs"
+    ),
     output: str = typer.Option("./patterns.csv", "--output", "-o", help="Output CSV file path"),
+    avg: bool = typer.Option(False, "--avg", help="Use averaged TIFF folder instead of ND2 pattern file"),
     fov: int | None = typer.Option(None, "--fov", help="Process only this FOV (default: all FOVs)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Detect micropatterns and save bounding boxes to CSV.
 
-    Output CSV format: cell,fov,x,y,w,h
+    Use -p/--patterns for dedicated pattern files, or with --avg for
+    pre-averaged TIFFs. Output CSV format: cell,fov,x,y,w,h
     """
+    if patterns is None:
+        typer.echo("Error: --patterns/-p is required", err=True)
+        raise typer.Exit(1)
+
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    if avg:
+        patterns_path = Path(patterns)
+        if not patterns_path.exists():
+            typer.echo(f"Error: Path does not exist: {patterns}", err=True)
+            raise typer.Exit(1)
+        if patterns_path.is_file():
+            typer.echo("Error: --avg requires a folder, not a file", err=True)
+            raise typer.Exit(1)
+
+        tif_files = sorted(patterns_path.glob("*.tif*"))
+        typer.echo(f"Found {len(tif_files)} averaged TIFF files in {patterns}")
+        return
 
     from ..core.pattern import PatternDetector
 
@@ -37,6 +58,37 @@ def pattern(
 
     detector.save_csv(records, output)
     typer.echo(f"Saved to: {output}")
+
+
+@app.command()
+def average(
+    cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
+    cell_channel: int = typer.Option(0, "--cc", help="Channel index for cell bodies (phase contrast)"),
+    t0: int | None = typer.Option(None, "--t0", help="Start frame index (inclusive, supports negative)"),
+    t1: int | None = typer.Option(None, "--t1", help="End frame index (exclusive, supports negative)"),
+    output_dir: str = typer.Option(".", "--output-dir", help="Output directory for averaged TIFFs"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Average time-lapse data to enhance pattern contrast.
+
+    Outputs one averaged TIFF per FOV (patterns_avg_fov_{fov}.tif) in the
+    specified output directory. Useful for detecting patterns from phase
+    contrast images without a dedicated pattern file.
+    """
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    from ..core.pattern import PatternAverager
+
+    averager = PatternAverager(
+        cells_path=cells,
+        cell_channel=cell_channel,
+        t0=t0,
+        t1=t1,
+        output_dir=output_dir,
+    )
+    output_paths = averager.run()
+    typer.echo(f"Averaged {len(output_paths)} FOVs to {output_dir}")
 
 
 @app.command()
