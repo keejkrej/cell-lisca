@@ -3,7 +3,6 @@
 import logging
 import sys
 from pathlib import Path
-from typing import cast
 
 import typer
 
@@ -262,6 +261,72 @@ def tension(
         typer.echo(f"VMSI model saved to {output}")
     else:
         typer.echo("VMSI analysis completed (model not saved)")
+
+
+@app.command()
+def graph(
+    input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with extracted data"),
+    output: str = typer.Option(..., "--output", "-o", help="Output directory for plots"),
+    fov: int = typer.Option(..., "--fov", help="FOV index"),
+    pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
+    sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
+    start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame (default: 0)"),
+    end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive, default: all)"),
+    plot: bool = typer.Option(False, "--plot", help="Generate boundary visualization plots"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Visualize cell boundaries (doublets, triplets, quartets) from extracted H5 data."""
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    if not Path(input).exists():
+        typer.echo(f"Error: Input file does not exist: {input}", err=True)
+        raise typer.Exit(1)
+
+    from ..graph.adjacency import BoundaryPixelTracker
+    from ..graph.h5_loader import H5SegmentationLoader
+
+    loader = H5SegmentationLoader()
+    tracker = BoundaryPixelTracker()
+
+    typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
+    loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
+    segmentation_masks = np.asarray(loaded_data["segmentation_masks"])
+
+    if segmentation_masks.ndim != 3:
+        typer.echo(f"Error: Expected 3D segmentation masks, got shape {segmentation_masks.shape}", err=True)
+        raise typer.Exit(1)
+
+    n_frames = segmentation_masks.shape[0]
+    start = start_frame if start_frame is not None else 0
+    end = end_frame if end_frame is not None else n_frames
+
+    if start < 0 or end > n_frames or start >= end:
+        typer.echo(f"Error: Invalid frame range [{start}, {end}) for {n_frames} frames", err=True)
+        raise typer.Exit(1)
+
+    output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    typer.echo(f"Processing frames {start} to {end - 1} ({end - start} frames)")
+
+    for frame_idx in range(start, end):
+        mask = segmentation_masks[frame_idx]
+        boundaries = tracker.extract_boundaries(mask)
+
+        if plot:
+            fig, _ = tracker.plot_boundaries_figure(mask, boundaries, frame_idx)
+            out_path = output_dir / f"frame_{frame_idx:04d}.png"
+            fig.savefig(out_path, dpi=150, bbox_inches="tight")
+            plt.close(fig)
+            typer.echo(f"  Saved: {out_path}")
+
+    typer.echo(f"Done. Output saved to {output_dir}")
 
 
 @app.command()

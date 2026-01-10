@@ -6,6 +6,8 @@ from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
 from scipy.ndimage import binary_dilation
 
 logger = logging.getLogger(__name__)
@@ -268,3 +270,84 @@ class BoundaryPixelTracker:
             stats["avg_boundary_length"] = 0
 
         return stats
+
+    def create_boundary_mask(
+        self,
+        mask: np.ndarray,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+    ) -> np.ndarray:
+        """Create an RGB mask with unique colors for each boundary tuple.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            2D segmentation mask with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+
+        Returns
+        -------
+        np.ndarray
+            RGB image (H, W, 3) with unique colors for each boundary tuple
+        """
+        boundary_mask = np.zeros((*mask.shape, 3), dtype=np.uint8)
+
+        if not boundaries:
+            return boundary_mask
+
+        n_boundaries = len(boundaries)
+        cmap = (
+            plt.cm.get_cmap("hsv", n_boundaries)
+            if n_boundaries <= 20
+            else plt.cm.get_cmap("tab20", min(20, n_boundaries))
+        )
+        cmap = plt.cm.get_cmap("tab20", 20)
+
+        for idx, (_key, coords) in enumerate(boundaries.items()):
+            if len(coords) == 0:
+                continue
+            color = np.array(cmap(idx)[:3]) * 255
+            for coord in coords:
+                x, y = coord[0], coord[1]
+                if 0 <= y < mask.shape[0] and 0 <= x < mask.shape[1]:
+                    boundary_mask[y, x] = color.astype(np.uint8)
+
+        return boundary_mask
+
+    def plot_boundaries_figure(
+        self,
+        mask: np.ndarray,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+        frame_idx: int = 0,
+    ) -> tuple[Figure, Axes]:
+        """Create a 2-panel figure with segmentation mask and boundary mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            2D segmentation mask with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+        frame_idx : int
+            Frame index for title
+
+        Returns
+        -------
+        tuple
+            (figure, axes) - matplotlib Figure and array of Axes
+        """
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+        ax1 = axes[0]
+        ax1.imshow(mask, cmap="tab20", interpolation="nearest")
+        ax1.set_title(f"Segmentation Mask (Frame {frame_idx})")
+        ax1.axis("off")
+
+        boundary_mask = self.create_boundary_mask(mask, boundaries)
+        ax2 = axes[1]
+        ax2.imshow(boundary_mask)
+        ax2.set_title(f"Boundaries ({len(boundaries)} tuples)")
+        ax2.axis("off")
+
+        plt.tight_layout()
+        return fig, axes

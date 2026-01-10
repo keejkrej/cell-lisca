@@ -1,8 +1,8 @@
 """Convert TIFF files to H5 with segmentation and tracking."""
 
 import logging
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 import h5py
 import numpy as np
@@ -47,7 +47,7 @@ class Converter:
         """Get the progress signal for connecting callbacks."""
         return self._progress.progress
 
-    def convert(self, min_frames: int = 1, on_file_start: Optional[Callable] = None) -> int:
+    def convert(self, min_frames: int = 1, on_file_start: Callable | None = None) -> int:
         """Convert TIFF files to H5.
 
         Parameters
