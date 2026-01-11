@@ -10,6 +10,7 @@ from skimage import graph
 
 logger = logging.getLogger(__name__)
 
+
 class CellGrapher:
     """Constructs adjacency graphs from tracked cell segmentation masks."""
 
@@ -35,7 +36,7 @@ class CellGrapher:
 
         dilated_regions: dict[int, np.ndarray] = {}
         for region in regions:
-            region_mask = (mask_copy == region)
+            region_mask = mask_copy == region
             dilated_regions[region] = binary_dilation(region_mask)
 
         for region1, region2 in combinations(regions, 2):
@@ -44,12 +45,12 @@ class CellGrapher:
             overlap = np.logical_and(dilated_regions[region1], dilated_regions[region2])
             adjacency = np.sum(overlap) / 2
             logger.debug(f"Adjacency between region {region1} and region {region2}: {adjacency}")
-            rag[region1][region2]['adjacency'] = adjacency
+            rag[region1][region2]["adjacency"] = adjacency
 
         # Add track ID information if available
         if track_ids:
             for node in rag.nodes():
-                rag.nodes[node]['track_id'] = node
+                rag.nodes[node]["track_id"] = node
 
         return rag
 
@@ -70,18 +71,19 @@ class CellGrapher:
             graphs.append(graph)
         return graphs
 
-    def build_temporal_graphs(self, tracked_masks: list[np.ndarray],
-                            track_maps: list[dict[int, int]]) -> list[nx.Graph]:
+    def build_temporal_graphs(
+        self, tracked_masks: list[np.ndarray], track_maps: list[dict[int, int]]
+    ) -> list[nx.Graph]:
         """
         Build graphs for each frame with consistent track IDs across time.
-        
+
         Parameters
         ----------
         tracked_masks : List[np.ndarray]
             List of masks with global track IDs
         track_maps : List[Dict[int, int]]
             List of track mappings for each frame
-            
+
         Returns
         -------
         List[nx.Graph]
@@ -90,15 +92,13 @@ class CellGrapher:
         graphs = []
 
         for frame_idx, (mask, track_map) in enumerate(zip(tracked_masks, track_maps, strict=False)):
-            # Build graph from tracked mask
-            G = self._graph(mask, track_ids=True)
+            g = self._graph(mask, track_ids=True)
 
-            # Add temporal information
-            for node in G.nodes():
-                G.nodes[node]['frame'] = frame_idx
-                G.nodes[node]['local_label'] = self._find_local_label(node, track_map)
+            for node in g.nodes():
+                g.nodes[node]["frame"] = frame_idx
+                g.nodes[node]["local_label"] = self._find_local_label(node, track_map)
 
-            graphs.append(G)
+            graphs.append(g)
 
         return graphs
 
@@ -108,6 +108,3 @@ class CellGrapher:
             if tid == track_id:
                 return local_label
         return -1
-
-
-

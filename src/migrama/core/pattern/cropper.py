@@ -1,8 +1,8 @@
 """
-Cell cropper - crops cell regions from ND2 files using bounding boxes from CSV.
+Cell cropper - crops cell regions from cell data sources using bounding boxes from CSV.
 
-This module works with cells.nd2 + CSV bounding boxes.
-Input: cells.nd2 + patterns.csv (from PatternDetector)
+This module works with CellFovSource (ND2 or per-FOV TIFFs) + CSV bounding boxes.
+Input: CellFovSource + patterns.csv (from PatternDetector)
 Output: cropped cell regions for analysis
 """
 
@@ -11,9 +11,10 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+import cv2
 import numpy as np
 
-from ..io.nikon import get_nd2_channel_stack, get_nd2_frame, load_nd2
+from ..cell_source import CellFovSource
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 class BoundingBox:
     """Bounding box for a pattern."""
 
-    cell: int  # pattern index within FOV
+    cell: int
     fov: int
     x: int
     y: int
@@ -64,7 +65,6 @@ def load_bboxes_csv(csv_path: str | Path) -> dict[int, list[BoundingBox]]:
                 bboxes_by_fov[bbox.fov] = []
             bboxes_by_fov[bbox.fov].append(bbox)
 
-    # Sort by cell index within each FOV
     for fov in bboxes_by_fov:
         bboxes_by_fov[fov].sort(key=lambda b: b.cell)
 
@@ -73,47 +73,44 @@ def load_bboxes_csv(csv_path: str | Path) -> dict[int, list[BoundingBox]]:
 
 
 class CellCropper:
-    """Crop cell regions from ND2 files using bounding boxes.
+    """Crop cell regions from cell data sources using bounding boxes.
 
-    This class works with cells.nd2 files and uses pre-computed
-    bounding boxes from a CSV file (output of PatternDetector).
+    This class works with CellFovSource (ND2 or per-FOV TIFFs) and uses
+    pre-computed bounding boxes from a CSV file (output of PatternDetector).
     """
 
     def __init__(
         self,
-        cells_path: str,
+        source: CellFovSource,
         bboxes_csv: str,
         nuclei_channel: int = 1,
     ) -> None:
-        """Initialize cropper with cells file and bounding boxes.
+        """Initialize cropper with cell source and bounding boxes.
 
         Parameters
         ----------
-        cells_path : str
-            Path to the cells ND2 file (timelapse)
+        source : CellFovSource
+            Source of cell timelapse data (ND2 or TIFF)
         bboxes_csv : str
             Path to CSV file with bounding boxes (from PatternDetector)
         nuclei_channel : int
             Channel index for nuclei (default: 1)
         """
-        self.cells_path = Path(cells_path).resolve()
+        self.source = source
         self.bboxes_csv = Path(bboxes_csv).resolve()
         self.nuclei_channel = nuclei_channel
 
-        # Load cells ND2
-        self.cells_xarr, metadata = load_nd2(self.cells_path)
-        self.n_fovs = metadata.n_fovs
-        self.n_frames = metadata.n_frames
-        self.n_channels = metadata.n_channels
-        self.channel_names = metadata.channel_names
-        self.dtype = self.cells_xarr.dtype
+        self.n_fovs = source.n_fovs
+        self.n_frames = source.n_frames
+        self.n_channels = source.n_channels
+        self.height = source.height
+        self.width = source.width
+        self.dtype = source.dtype
 
-        # Load bounding boxes
         self.bboxes_by_fov = load_bboxes_csv(self.bboxes_csv)
 
-        # Validate
         if self.n_channels < 2:
-            raise ValueError(f"Cells file must have at least 2 channels, got {self.n_channels}")
+            raise ValueError(f"Cells source must have at least 2 channels, got {self.n_channels}")
 
         logger.info(
             f"Initialized CellCropper: {self.n_fovs} FOVs, {self.n_frames} frames, "
@@ -169,7 +166,8 @@ class CellCropper:
             raise ValueError(f"Cell {cell} not found in FOV {fov} (has {len(bboxes)} patterns)")
 
         bbox = bboxes[cell]
-        img = get_nd2_frame(self.cells_xarr, fov, self.nuclei_channel, frame)
+        fov_data = self.source.get_fov(fov)
+        img = fov_data[frame, self.nuclei_channel]
         cropped = img[bbox.y : bbox.y + bbox.h, bbox.x : bbox.x + bbox.w]
 
         if normalize:
@@ -207,7 +205,8 @@ class CellCropper:
             raise ValueError(f"Cell {cell} not found in FOV {fov} (has {len(bboxes)} patterns)")
 
         bbox = bboxes[cell]
-        stack = get_nd2_channel_stack(self.cells_xarr, fov, frame)
+        fov_data = self.source.get_fov(fov)
+        stack = fov_data[frame]
         cropped = stack[:, bbox.y : bbox.y + bbox.h, bbox.x : bbox.x + bbox.w]
 
         if normalize:
@@ -251,17 +250,15 @@ class CellCropper:
         end_frame = end_frame or self.n_frames
         channels = channels or list(range(self.n_channels))
 
+        fov_data = self.source.get_fov(fov)
         frames = []
         for t in range(start_frame, end_frame):
-            stack = get_nd2_channel_stack(self.cells_xarr, fov, t)
-            cropped = stack[channels, bbox.y : bbox.y + bbox.h, bbox.x : bbox.x + bbox.w]
+            cropped = fov_data[t, channels, bbox.y : bbox.y + bbox.h, bbox.x : bbox.x + bbox.w]
             frames.append(cropped)
 
         return np.stack(frames)
 
     def _normalize(self, image: np.ndarray) -> np.ndarray:
         """Normalize image to 0-255 uint8."""
-        import cv2
-
         normalized = cv2.normalize(image, None, 0, 255, cv2.NORM_MINMAX)
         return normalized.astype(np.uint8)

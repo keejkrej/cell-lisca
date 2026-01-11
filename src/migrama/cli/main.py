@@ -13,10 +13,10 @@ app = typer.Typer(help="Migrama: A comprehensive toolkit for micropatterned time
 @app.command()
 def pattern(
     patterns: str | None = typer.Option(
-        None, "--patterns", "-p", help="Path to patterns ND2 file or folder with averaged TIFFs"
+        None, "--patterns", "-p", help="Path to patterns ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
     ),
     output: str = typer.Option("./patterns.csv", "--output", "-o", help="Output CSV file path"),
-    avg: bool = typer.Option(False, "--avg", help="Use averaged TIFF folder instead of ND2 pattern file"),
+    avg: bool = typer.Option(False, "--avg", help="Interpret --patterns as per-FOV TIFF file path"),
     fov: int | None = typer.Option(None, "--fov", help="Process only this FOV (default: all FOVs)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
@@ -37,17 +37,21 @@ def pattern(
         if not patterns_path.exists():
             typer.echo(f"Error: Path does not exist: {patterns}", err=True)
             raise typer.Exit(1)
-        if patterns_path.is_file():
+        if not patterns_path.is_dir():
             typer.echo("Error: --avg requires a folder, not a file", err=True)
             raise typer.Exit(1)
 
-        tif_files = sorted(patterns_path.glob("*.tif*"))
-        typer.echo(f"Found {len(tif_files)} averaged TIFF files in {patterns}")
-        return
+        from ..core.pattern.source import TiffPatternFovSource
+
+        source = TiffPatternFovSource(patterns_path)
+    else:
+        from ..core.pattern.source import Nd2PatternFovSource
+
+        source = Nd2PatternFovSource(patterns)
 
     from ..core.pattern import PatternDetector
 
-    detector = PatternDetector(patterns_path=patterns)
+    detector = PatternDetector(source=source)
 
     if fov is not None:
         records = detector.detect_fov(fov)
@@ -93,12 +97,15 @@ def average(
 
 @app.command()
 def analyze(
-    cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
+    cells: str = typer.Option(
+        ..., "--cells", "-c", help="Path to cells ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
+    ),
     csv: str = typer.Option(..., "--csv", help="Path to patterns CSV file"),
     output: str = typer.Option("./analysis.csv", "--output", "-o", help="Output CSV file path"),
     nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
     n_cells: int = typer.Option(4, "--n-cells", help="Target number of cells per pattern"),
     min_size: int = typer.Option(15, "--min-size", help="Minimum object size for Cellpose"),
+    tiff: bool = typer.Option(False, "--tiff", help="Interpret --cells as per-FOV TIFF file path"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Analyze cell counts and output t0/t1 ranges."""
@@ -106,9 +113,15 @@ def analyze(
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
     from ..analyze import Analyzer
+    from ..core.cell_source import Nd2CellFovSource, TiffCellFovSource
+
+    if tiff:
+        source = TiffCellFovSource(cells)
+    else:
+        source = Nd2CellFovSource(cells)
 
     analyzer = Analyzer(
-        cells_path=cells,
+        source=source,
         csv_path=csv,
         nuclei_channel=nuclei_channel,
         n_cells=n_cells,
@@ -120,22 +133,31 @@ def analyze(
 
 @app.command()
 def extract(
-    cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
+    cells: str = typer.Option(
+        ..., "--cells", "-c", help="Path to cells ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
+    ),
     csv: str = typer.Option(..., "--csv", help="Path to analysis CSV file"),
     output: str = typer.Option("./extracted.h5", "--output", "-o", help="Output H5 file path"),
     nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
     cell_channel: int = typer.Option(0, "--cc", help="Channel index for cell bodies"),
     min_frames: int = typer.Option(1, "--min-frames", help="Minimum frames per sequence"),
+    tiff: bool = typer.Option(False, "--tiff", help="Interpret --cells as per-FOV TIFF file path"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Extract sequences with segmentation and tracking."""
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
+    from ..core.cell_source import Nd2CellFovSource, TiffCellFovSource
     from ..extract import Extractor
 
+    if tiff:
+        source = TiffCellFovSource(cells)
+    else:
+        source = Nd2CellFovSource(cells)
+
     extractor = Extractor(
-        cells_path=cells,
+        source=source,
         analysis_csv=csv,
         output_path=output,
         nuclei_channel=nuclei_channel,
@@ -405,7 +427,7 @@ def graph(
 
 
 @app.command()
-def info(
+def info(  # noqa: C901
     input: str = typer.Option(..., "--input", "-i", help="Path to H5 file"),
     plot: str | None = typer.Option(None, "--plot", "-p", help="Plot a dataset slice: 'path,(dim0,dim1,...)'"),
     output: str | None = typer.Option(None, "--output", "-o", help="Save plot to PNG file"),
@@ -448,7 +470,7 @@ def info(
                 indices = [int(x.strip()) for x in slice_str.split(",") if x.strip() != ""]
             except ValueError:
                 typer.echo("Error: Slice indices must be integers", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             if path_part not in f:
                 typer.echo(f"Error: Dataset not found: {path_part}", err=True)
@@ -466,7 +488,7 @@ def info(
                 sliced = data[tuple(indices)]
             except IndexError as e:
                 typer.echo(f"Error: Invalid slice indices for dataset shape {data.shape}: {e}", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             if sliced.ndim != 2:
                 typer.echo(f"Error: Sliced result has {sliced.ndim} dimensions, expected 2", err=True)

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from ..core import CellposeCounter
+from ..core.cell_source import CellFovSource
 from ..core.pattern import CellCropper
 
 logger = logging.getLogger(__name__)
@@ -28,11 +29,9 @@ class AnalysisRecord:
 class Analyzer:
     """Analyze cell counts for patterns across frames."""
 
-    # Constructor
-
     def __init__(
         self,
-        cells_path: str,
+        source: CellFovSource,
         csv_path: str,
         nuclei_channel: int = 1,
         n_cells: int = 4,
@@ -42,8 +41,8 @@ class Analyzer:
 
         Parameters
         ----------
-        cells_path : str
-            Path to cells ND2 file
+        source : CellFovSource
+            Source of cell timelapse data (ND2 or TIFF)
         csv_path : str
             Path to patterns CSV file
         nuclei_channel : int
@@ -53,14 +52,14 @@ class Analyzer:
         min_size : int
             Minimum object size for Cellpose
         """
-        self.cells_path = Path(cells_path).resolve()
+        self.source = source
         self.csv_path = Path(csv_path).resolve()
         self.nuclei_channel = nuclei_channel
         self.n_cells = n_cells
         self.min_size = min_size
 
         self.cropper = CellCropper(
-            cells_path=str(self.cells_path),
+            source=source,
             bboxes_csv=str(self.csv_path),
             nuclei_channel=nuclei_channel,
         )
@@ -114,8 +113,6 @@ class Analyzer:
 
         self._write_csv(output_path, records)
         return records
-
-    # Private Methods
 
     @staticmethod
     def _find_longest_run(counts: list[int], target: int) -> tuple[int, int]:

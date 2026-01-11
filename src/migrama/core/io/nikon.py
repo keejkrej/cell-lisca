@@ -78,7 +78,7 @@ def load_nd2(nd2_path: Path) -> tuple[xr.DataArray, ND2Metadata]:
         )
         return da, metadata
     except Exception as e:
-        raise RuntimeError(f"Failed to load ND2: {str(e)}")
+        raise RuntimeError(f"Failed to load ND2: {str(e)}") from None
 
 
 def get_nd2_frame(da: xr.DataArray, f: int, c: int, t: int) -> np.ndarray:

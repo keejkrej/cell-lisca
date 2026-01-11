@@ -18,12 +18,12 @@ class CellTracker:
     def track_frames(self, masks: list[np.ndarray]) -> list[dict[int, int]]:
         """
         Track cells across a sequence of frames.
-        
+
         Parameters
         ----------
         masks : List[np.ndarray]
             List of segmentation masks for each frame
-            
+
         Returns
         -------
         List[Dict[int, int]]
@@ -61,11 +61,12 @@ class CellTracker:
 
         return tracking_maps
 
-    def _track_iou(self, prev_mask: np.ndarray, curr_mask: np.ndarray,
-                   prev_track_map: dict[int, int]) -> dict[int, int]:
+    def _track_iou(
+        self, prev_mask: np.ndarray, curr_mask: np.ndarray, prev_track_map: dict[int, int]
+    ) -> dict[int, int]:
         """
         Track cells between two frames using Intersection over Union.
-        
+
         Parameters
         ----------
         prev_mask : np.ndarray
@@ -74,7 +75,7 @@ class CellTracker:
             Current frame segmentation mask
         prev_track_map : Dict[int, int]
             Track mapping from previous frame
-            
+
         Returns
         -------
         Dict[int, int]
@@ -90,8 +91,8 @@ class CellTracker:
 
         for i, prev_label in enumerate(prev_labels):
             for j, curr_label in enumerate(curr_labels):
-                prev_binary = (prev_mask == prev_label)
-                curr_binary = (curr_mask == curr_label)
+                prev_binary = prev_mask == prev_label
+                curr_binary = curr_mask == curr_label
 
                 intersection = np.logical_and(prev_binary, curr_binary)
                 union = np.logical_or(prev_binary, curr_binary)
@@ -112,7 +113,7 @@ class CellTracker:
 
         matches.sort(reverse=True)
 
-        for iou, prev_idx, curr_idx in matches:
+        for _iou, prev_idx, curr_idx in matches:
             prev_label = prev_labels[prev_idx]
             curr_label = curr_labels[curr_idx]
 
@@ -135,14 +136,14 @@ class CellTracker:
     def get_tracked_mask(self, mask: np.ndarray, track_map: dict[int, int]) -> np.ndarray:
         """
         Convert a mask with local labels to tracked mask with global track IDs.
-        
+
         Parameters
         ----------
         mask : np.ndarray
             Original segmentation mask with local labels
         track_map : Dict[int, int]
             Mapping from local labels to global track IDs
-            
+
         Returns
         -------
         np.ndarray

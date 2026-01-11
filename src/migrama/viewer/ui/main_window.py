@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-matplotlib.use('Qt5Agg')
+matplotlib.use("Qt5Agg")
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 
@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
         self.figure = Figure(tight_layout=True)
         self.canvas = FigureCanvas(self.figure)
         self.ax = self.figure.add_subplot(111)
-        self.ax.axis('off')
+        self.ax.axis("off")
         right_layout.addWidget(self.canvas)
 
         # Add panels to splitter
@@ -205,20 +205,14 @@ class MainWindow(QMainWindow):
     # File operations
     def _handle_open_folder(self):
         """Handle opening a folder"""
-        folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Folder",
-            "",
-            QFileDialog.Option. ShowDirsOnly
-        )
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Folder", "", QFileDialog.Option.ShowDirsOnly)
         if folder_path:
             self._load_folder(folder_path)
 
     def _load_folder(self, folder_path):
         """Load NPY files from the selected folder"""
         self.current_folder = folder_path
-        self.npy_files = [f for f in os.listdir(folder_path)
-                          if f.lower().endswith('.npy')]
+        self.npy_files = [f for f in os.listdir(folder_path) if f.lower().endswith(".npy")]
         self.npy_files.sort()
 
         if self.npy_files:
@@ -293,18 +287,18 @@ class MainWindow(QMainWindow):
             self.channel_names = None
             self.segmentation_channel_index = None
             self._original_metadata = None  # Store original metadata for trimmed files
-            metadata_path = os.path.splitext(file_path)[0] + '.yaml'
+            metadata_path = os.path.splitext(file_path)[0] + ".yaml"
             if os.path.exists(metadata_path):
                 try:
                     with open(metadata_path) as f:
                         meta = yaml.safe_load(f) or {}
                     self._original_metadata = meta  # Store original metadata
-                    ch = meta.get('channels')
+                    ch = meta.get("channels")
                     if isinstance(ch, list) and all(isinstance(x, str) for x in ch):
                         self.channel_names = ch
                         # Find 'segmentation' channel by exact name (case-insensitive match also)
                         for i, name in enumerate(ch):
-                            if name == 'segmentation' or name.lower().strip() == 'segmentation':
+                            if name == "segmentation" or name.lower().strip() == "segmentation":
                                 self.segmentation_channel_index = i
                                 break
                 except Exception as e:
@@ -420,15 +414,17 @@ class MainWindow(QMainWindow):
                 if (
                     self.segmentation_channel_index is not None
                     and i == self.segmentation_channel_index
-                    and name.lower().strip() != 'segmentation'
+                    and name.lower().strip() != "segmentation"
                 ):
                     label += " (segmentation)"
                 self.channel_selector.addItem(label)
         else:
             for i in range(num_channels):
-                suffix = " (segmentation)" if (
-                    self.segmentation_channel_index is not None and i == self.segmentation_channel_index
-                ) else ""
+                suffix = (
+                    " (segmentation)"
+                    if (self.segmentation_channel_index is not None and i == self.segmentation_channel_index)
+                    else ""
+                )
                 self.channel_selector.addItem(f"Channel {i}{suffix}")
 
         # Reset to first channel
@@ -456,8 +452,7 @@ class MainWindow(QMainWindow):
             from matplotlib import colors
 
             is_seg = (
-                self.segmentation_channel_index is not None and
-                self.current_channel == self.segmentation_channel_index
+                self.segmentation_channel_index is not None and self.current_channel == self.segmentation_channel_index
             )
 
             if is_seg:
@@ -474,28 +469,22 @@ class MainWindow(QMainWindow):
 
                 # Build a ListedColormap: background black, then tab20 colors cycling
                 from matplotlib import cm
-                base = cm.get_cmap('tab20', 20)
+
+                base = cm.get_cmap("tab20", 20)
                 colors_list = [(0.0, 0.0, 0.0, 1.0)]  # label 0 = black
                 for i in range(1, n_classes):
                     colors_list.append(base((i - 1) % 20))
-                cmap = matplotlib.colors.ListedColormap(colors_list, name='seg_cmap', N=n_classes)
+                cmap = matplotlib.colors.ListedColormap(colors_list, name="seg_cmap", N=n_classes)
 
                 # Discrete boundaries for integer labels 0..max_label
                 boundaries = np.arange(-0.5, max_label + 1.5, 1)
                 norm = colors.BoundaryNorm(boundaries, ncolors=cmap.N, clip=True)
 
-                recreate = (
-                    self.img_display is None or getattr(self, "_last_mode_seg", None) is not True
-                )
+                recreate = self.img_display is None or getattr(self, "_last_mode_seg", None) is not True
                 if recreate:
                     self.ax.clear()
-                    self.ax.axis('off')
-                    self.img_display = self.ax.imshow(
-                        label_img,
-                        cmap=cmap,
-                        norm=norm,
-                        interpolation='nearest'
-                    )
+                    self.ax.axis("off")
+                    self.img_display = self.ax.imshow(label_img, cmap=cmap, norm=norm, interpolation="nearest")
                     self.figure.subplots_adjust(left=0, right=1, top=1, bottom=0)
                 else:
                     self.img_display.set_cmap(cmap)
@@ -507,19 +496,11 @@ class MainWindow(QMainWindow):
                 current_image = self.stack[self.current_frame]  # (c, h, w)
                 display_image = current_image[self.current_channel]  # (h, w)
 
-                recreate = (
-                    self.img_display is None or getattr(self, "_last_mode_seg", None) is True
-                )
+                recreate = self.img_display is None or getattr(self, "_last_mode_seg", None) is True
                 if recreate:
                     self.ax.clear()
-                    self.ax.axis('off')
-                    self.img_display = self.ax.imshow(
-                        display_image,
-                        cmap='gray',
-                        aspect='equal',
-                        vmin=0,
-                        vmax=255
-                    )
+                    self.ax.axis("off")
+                    self.img_display = self.ax.imshow(display_image, cmap="gray", aspect="equal", vmin=0, vmax=255)
                     self.figure.subplots_adjust(left=0, right=1, top=1, bottom=0)
                 else:
                     self.img_display.set_data(display_image)
@@ -565,16 +546,14 @@ class MainWindow(QMainWindow):
     def _check_save_enabled(self):
         """Enable/disable save button based on interval state"""
         self.save_interval_button.setEnabled(
-            self.start_frame is not None and
-            self.end_frame is not None and
-            self.start_frame != self.end_frame
+            self.start_frame is not None and self.end_frame is not None and self.start_frame != self.end_frame
         )
 
     def _get_interval_path(self):
         """Get the path to the interval YAML file"""
         if self.file_path is None:
             return None
-        return os.path.splitext(self.file_path)[0] + '_interval.yaml'
+        return os.path.splitext(self.file_path)[0] + "_interval.yaml"
 
     def _load_interval(self):
         """Load interval from YAML file"""
@@ -583,8 +562,8 @@ class MainWindow(QMainWindow):
             if interval_file and os.path.exists(interval_file):
                 with open(interval_file) as f:
                     data = yaml.safe_load(f) or {}
-                    self.start_frame = data.get('start_frame')
-                    self.end_frame = data.get('end_frame')
+                    self.start_frame = data.get("start_frame")
+                    self.end_frame = data.get("end_frame")
                     if self.start_frame is not None and self.end_frame is not None:
                         self._update_interval_label()
                         self._check_save_enabled()
@@ -603,11 +582,8 @@ class MainWindow(QMainWindow):
 
                 interval_file = self._get_interval_path()
                 if interval_file:
-                    data = {
-                        'start_frame': self.start_frame,
-                        'end_frame': self.end_frame
-                    }
-                    with open(interval_file, 'w') as f:
+                    data = {"start_frame": self.start_frame, "end_frame": self.end_frame}
+                    with open(interval_file, "w") as f:
                         yaml.safe_dump(data, f, sort_keys=False)
                     self.statusBar.showMessage(f"Interval set: {self.start_frame + 1} - {self.end_frame + 1}")
         except Exception as e:
@@ -616,12 +592,7 @@ class MainWindow(QMainWindow):
     # Save operations
     def _handle_set_save_folder(self):
         """Handle setting the save folder"""
-        folder_path = QFileDialog.getExistingDirectory(
-            self,
-            "Select Save Folder",
-            "",
-            QFileDialog.Option.ShowDirsOnly
-        )
+        folder_path = QFileDialog.getExistingDirectory(self, "Select Save Folder", "", QFileDialog.Option.ShowDirsOnly)
         if folder_path:
             self.save_folder = folder_path
             self.statusBar.showMessage(f"Save folder set to: {folder_path}")
@@ -638,7 +609,7 @@ class MainWindow(QMainWindow):
 
         try:
             # Extract the interval from the ORIGINAL stack (not normalized)
-            interval_stack = self.original_stack[self.start_frame:self.end_frame + 1]
+            interval_stack = self.original_stack[self.start_frame : self.end_frame + 1]
 
             # Generate save filename
             if self.current_file_index >= 0 and self.npy_files:
@@ -650,7 +621,7 @@ class MainWindow(QMainWindow):
                 np.save(save_path, interval_stack)
 
                 # Save corresponding YAML metadata
-                yaml_path = os.path.splitext(save_path)[0] + '.yaml'
+                yaml_path = os.path.splitext(save_path)[0] + ".yaml"
                 self._save_trimmed_yaml(yaml_path, self.start_frame, self.end_frame)
 
                 self.statusBar.showMessage(f"Saved interval to {save_path}")
@@ -663,23 +634,22 @@ class MainWindow(QMainWindow):
             metadata = {
                 "start_frame": start_frame,
                 "end_frame": end_frame,
-                "channels": self.channel_names if self.channel_names else []
+                "channels": self.channel_names if self.channel_names else [],
             }
 
             # Add pattern_bbox if available from original metadata
-            if hasattr(self, '_original_metadata') and self._original_metadata:
-                if 'pattern_bbox' in self._original_metadata:
-                    metadata['pattern_bbox'] = self._original_metadata['pattern_bbox']
+            if hasattr(self, "_original_metadata") and self._original_metadata:
+                if "pattern_bbox" in self._original_metadata:
+                    metadata["pattern_bbox"] = self._original_metadata["pattern_bbox"]
 
-            with open(yaml_path, 'w') as f:
+            with open(yaml_path, "w") as f:
                 yaml.safe_dump(metadata, f, sort_keys=False)
         except Exception as e:
             self.statusBar.showMessage(f"Warning: Failed to save YAML metadata: {str(e)}")
 
-    def resizeEvent(self, event):
+    def resizeEvent(self, event):  # noqa: N802 (Qt method override)
         """Handle window resize events"""
         super().resizeEvent(event)
         if self.img_display is not None:
-            # Redraw the canvas to update image scaling
             self.figure.subplots_adjust(left=0, right=1, top=1, bottom=0)
             self.canvas.draw()
