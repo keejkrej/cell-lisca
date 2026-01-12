@@ -35,6 +35,10 @@ class H5SegmentationLoader:
             data = group["data"][...]
             segmentation_masks = group["cell_masks"][...]
 
+            nuclei_masks = None
+            if "nuclei_masks" in group:
+                nuclei_masks = group["nuclei_masks"][...]
+
             channels = None
             if "channels" in group:
                 channels = [c.decode("utf-8") for c in group["channels"][...]]
@@ -56,6 +60,7 @@ class H5SegmentationLoader:
         return {
             "data": data,
             "segmentation_masks": segmentation_masks,
+            "nuclei_masks": nuclei_masks,
             "metadata": yaml_metadata,
             "channels": channels,
             "sequence_metadata": metadata,

@@ -9,6 +9,7 @@ import h5py
 import numpy as np
 
 from ..core import CellposeSegmenter, CellTracker
+from ..core.cell_source import CellFovSource
 from ..core.pattern import CellCropper
 
 logger = logging.getLogger(__name__)
@@ -31,11 +32,9 @@ class AnalysisRow:
 class Extractor:
     """Extract sequences with segmentation and tracking."""
 
-    # Constructor
-
     def __init__(
         self,
-        cells_path: str,
+        source: CellFovSource,
         analysis_csv: str,
         output_path: str,
         nuclei_channel: int = 1,
@@ -45,8 +44,8 @@ class Extractor:
 
         Parameters
         ----------
-        cells_path : str
-            Path to cells ND2 file
+        source : CellFovSource
+            Source of cell timelapse data (ND2 or TIFF)
         analysis_csv : str
             Path to analysis CSV file
         output_path : str
@@ -56,14 +55,14 @@ class Extractor:
         cell_channel : int
             Channel index for cell bodies
         """
-        self.cells_path = Path(cells_path).resolve()
+        self.source = source
         self.analysis_csv = Path(analysis_csv).resolve()
         self.output_path = Path(output_path).resolve()
         self.nuclei_channel = nuclei_channel
         self.cell_channel = cell_channel
 
         self.cropper = CellCropper(
-            cells_path=str(self.cells_path),
+            source=source,
             bboxes_csv=str(self.analysis_csv),
             nuclei_channel=nuclei_channel,
         )
@@ -86,7 +85,7 @@ class Extractor:
         sequences_written = 0
 
         with h5py.File(self.output_path, "w") as h5file:
-            h5file.attrs["cells_path"] = str(self.cells_path)
+            h5file.attrs["cells_source"] = f"{type(self.source).__name__}"
             h5file.attrs["nuclei_channel"] = self.nuclei_channel
             h5file.attrs["cell_channel"] = self.cell_channel
 
@@ -132,8 +131,6 @@ class Extractor:
 
         logger.info(f"Saved {sequences_written} sequences to {self.output_path}")
         return sequences_written
-
-    # Private Methods
 
     @staticmethod
     def _load_analysis_rows(csv_path: Path) -> list[AnalysisRow]:
@@ -200,7 +197,7 @@ class Extractor:
         seq_group.create_dataset("nuclei_masks", data=nuclei_masks, compression="gzip")
         seq_group.create_dataset("cell_masks", data=cell_masks, compression="gzip")
 
-        channels = self.cropper.channel_names or [f"channel_{i}" for i in range(timelapse.shape[1])]
+        channels = [f"channel_{i}" for i in range(timelapse.shape[1])]
         seq_group.create_dataset("channels", data=np.array(channels, dtype="S"))
 
         seq_group.attrs["t0"] = row.t0

@@ -1,312 +1,422 @@
+"""Pixel-level boundary and junction tracking for cell segmentation masks."""
+
+import logging
+from itertools import combinations
+from typing import Any
 
 import matplotlib.pyplot as plt
-import networkx as nx
 import numpy as np
-from matplotlib import colors
-from scipy import ndimage
-from skimage import graph as ski_graph
+from matplotlib.axes import Axes
+from matplotlib.figure import Figure
+from scipy.ndimage import binary_dilation
+
+from migrama.core.voronoi import centroids_from_mask, generate_voronoi_labels
+
+logger = logging.getLogger(__name__)
 
 
-class AdjacencyGraphBuilder:
+class BoundaryPixelTracker:
+    """Track pixel-level boundaries and junctions in cell segmentation masks.
+
+    This class extracts and stores the exact pixel coordinates where cells
+    meet, enabling flexible geometric and topological analysis.
+
+    Uses dilation-based intersection to estimate boundary regions, which
+    may overestimate but provides robust boundary detection.
     """
-    A class for building weighted adjacency graphs from cell segmentation masks.
-    
-    This class calculates region adjacency graphs (RAG) where edge weights
-    represent the length of contact boundaries between adjacent cells.
-    """
 
-    def __init__(self, method: str = 'boundary_length'):
-        """
-        Initialize the AdjacencyGraphBuilder.
-        
+    def __init__(self, structuring_element=None):
+        """Initialize the BoundaryPixelTracker.
+
         Parameters
         ----------
-        method : str
-            Method for calculating edge weights:
-            - 'boundary_length': Count pixels along cell boundaries
-            - 'overlap_area': Use dilation-based overlap (faster but approximate)
+        structuring_element : np.ndarray, optional
+            Structuring element for dilation. If None, uses 3x3 cross-shaped
+            element (connectivity=1) which is appropriate for boundary detection.
         """
-        self.method = method
+        if structuring_element is None:
+            self.structuring_element = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]], dtype=bool)
+        else:
+            self.structuring_element = structuring_element
 
-    def build_graph(self, mask: np.ndarray) -> nx.Graph:
-        """
-        Build a weighted adjacency graph from a segmentation mask.
-        
+    def extract_boundaries(
+        self, mask: np.ndarray, include_2cell: bool = True, include_3cell: bool = True, include_4cell: bool = True
+    ) -> dict[tuple[int, ...], np.ndarray]:
+        """Extract all boundary pixels from a segmentation mask.
+
         Parameters
         ----------
         mask : np.ndarray
-            2D segmentation mask where each cell has a unique integer label
-            
-        Returns
-        -------
-        nx.Graph
-            NetworkX graph with nodes as cell labels and weighted edges
-        """
-        if self.method == 'boundary_length':
-            return self._build_boundary_length_graph(mask)
-        elif self.method == 'overlap_area':
-            return self._build_overlap_area_graph(mask)
-        else:
-            raise ValueError(f"Unknown method: {self.method}")
+            2D segmentation mask with integer labels (0 = background)
+        include_2cell : bool
+            Extract 2-cell boundaries (edges)
+        include_3cell : bool
+            Extract 3-cell junctions
+        include_4cell : bool
+            Extract 4-cell vertices
 
-    def _build_boundary_length_graph(self, mask: np.ndarray) -> nx.Graph:
-        """
-        Build graph with edge weights as actual boundary lengths.
-        
-        This method counts pixels where two regions meet.
-        """
-        rag = ski_graph.RAG(mask)
-
-        # Remove background node (label 0) if it exists
-        if 0 in rag.nodes():
-            rag.remove_node(0)
-
-        for edge in rag.edges():
-            region1, region2 = edge
-
-            mask1 = mask == region1
-            mask2 = mask == region2
-
-            boundary_length = 0
-
-            # Check horizontal adjacencies
-            horizontal_adj = np.logical_and(
-                mask1[:, :-1],
-                mask2[:, 1:]
-            )
-            boundary_length += np.sum(horizontal_adj)
-
-            horizontal_adj_rev = np.logical_and(
-                mask2[:, :-1],
-                mask1[:, 1:]
-            )
-            boundary_length += np.sum(horizontal_adj_rev)
-
-            # Check vertical adjacencies
-            vertical_adj = np.logical_and(
-                mask1[:-1, :],
-                mask2[1:, :]
-            )
-            boundary_length += np.sum(vertical_adj)
-
-            vertical_adj_rev = np.logical_and(
-                mask2[:-1, :],
-                mask1[1:, :]
-            )
-            boundary_length += np.sum(vertical_adj_rev)
-
-            rag[region1][region2]['weight'] = boundary_length
-            rag[region1][region2]['boundary_length'] = boundary_length
-
-        return rag
-
-    def _build_overlap_area_graph(self, mask: np.ndarray) -> nx.Graph:
-        """
-        Build graph using dilation-based overlap area method.
-        
-        This is faster but provides an approximation of contact area.
-        """
-        G = nx.Graph()
-
-        unique_labels = np.unique(mask)
-        unique_labels = unique_labels[unique_labels != 0]  # Exclude background
-
-        G.add_nodes_from(unique_labels)
-
-        for label in unique_labels:
-            region_mask = mask == label
-            dilated = ndimage.binary_dilation(region_mask)
-
-            neighbors = np.unique(mask[dilated])
-            neighbors = neighbors[(neighbors != 0) & (neighbors != label)]
-
-            for neighbor in neighbors:
-                if not G.has_edge(label, neighbor):
-                    neighbor_mask = mask == neighbor
-                    neighbor_dilated = ndimage.binary_dilation(neighbor_mask)
-
-                    overlap = np.logical_and(dilated, neighbor_dilated)
-                    weight = np.sum(overlap) / 2
-
-                    G.add_edge(label, neighbor, weight=weight, overlap_area=weight)
-
-        return G
-
-    def analyze_four_cell_cluster(
-        self,
-        graph: nx.Graph,
-        cells: list[int]
-    ) -> dict[str, float | bool]:
-        """
-        Analyze a four-cell cluster for T1 transition monitoring.
-        
-        Parameters
-        ----------
-        graph : nx.Graph
-            The adjacency graph
-        cells : list of int
-            List of 4 cell labels [a, b, c, d]
-            
         Returns
         -------
         dict
-            Analysis results including:
-            - 'ac_contact': Length/weight of edge between cells a and c
-            - 'bd_contact': Length/weight of edge between cells b and d
-            - 'is_t1_configuration': Whether this is a T1 configuration
+            Dictionary mapping sorted cell tuples to boundary pixel arrays.
+            Each value is a numpy array of shape (N, 2) with (x, y) coordinates.
         """
-        if len(cells) != 4:
-            raise ValueError("Exactly 4 cells required for T1 analysis")
+        boundaries = {}
 
-        a, b, c, d = cells
+        unique_labels = np.unique(mask)
+        unique_labels = unique_labels[unique_labels != 0]
 
-        ac_contact = graph.get_edge_data(a, c, default={'weight': 0})['weight']
-        bd_contact = graph.get_edge_data(b, d, default={'weight': 0})['weight']
+        if include_2cell:
+            pair_boundaries = self._extract_pairwise_boundaries(mask, unique_labels)
+            boundaries.update(pair_boundaries)
 
-        is_t1 = (ac_contact > 0 and bd_contact == 0) or (ac_contact == 0 and bd_contact > 0)
+        if include_3cell or include_4cell:
+            multi_boundaries = self._extract_multicell_junctions(mask, unique_labels, include_3cell, include_4cell)
+            boundaries.update(multi_boundaries)
 
-        return {
-            'ac_contact': ac_contact,
-            'bd_contact': bd_contact,
-            'is_t1_configuration': is_t1,
-            'ab_contact': graph.get_edge_data(a, b, default={'weight': 0})['weight'],
-            'bc_contact': graph.get_edge_data(b, c, default={'weight': 0})['weight'],
-            'cd_contact': graph.get_edge_data(c, d, default={'weight': 0})['weight'],
-            'da_contact': graph.get_edge_data(d, a, default={'weight': 0})['weight']
-        }
+        return boundaries
 
-    def visualize_graph(
-        self,
-        graph: nx.Graph,
-        mask: np.ndarray,
-        figsize: tuple[int, int] = (15, 5),
-        highlight_edges: list[tuple[int, int]] | None = None
-    ) -> plt.Figure:
-        """
-        Visualize the segmentation mask and adjacency graph.
-        
+    def _extract_pairwise_boundaries(self, mask: np.ndarray, labels: np.ndarray) -> dict[tuple[int, ...], np.ndarray]:
+        """Extract 2-cell boundary pixels using dilation intersection.
+
         Parameters
         ----------
-        graph : nx.Graph
-            The adjacency graph
         mask : np.ndarray
             Segmentation mask
+        labels : np.ndarray
+            Unique non-zero labels
+
+        Returns
+        -------
+        dict
+            Dictionary mapping (cell_i, cell_j) tuples to boundary pixel arrays
+        """
+        boundaries = {}
+
+        for i, j in combinations(labels, 2):
+            mask_i = mask == i
+            mask_j = mask == j
+
+            dilated_i = binary_dilation(mask_i, structure=self.structuring_element)
+            dilated_j = binary_dilation(mask_j, structure=self.structuring_element)
+
+            intersection = np.logical_and(dilated_i, dilated_j)
+
+            coords = self._boolean_to_coords(mask, intersection)
+            if len(coords) > 0:
+                key = tuple(sorted([int(i), int(j)]))
+                boundaries[key] = coords
+
+        return boundaries
+
+    def _extract_multicell_junctions(
+        self, mask: np.ndarray, labels: np.ndarray, include_3cell: bool, include_4cell: bool
+    ) -> dict[tuple[int, ...], np.ndarray]:
+        """Extract 3-cell and 4-cell junction pixels using dilation intersection.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Segmentation mask
+        labels : np.ndarray
+            Unique non-zero labels
+        include_3cell : bool
+            Include 3-cell junctions
+        include_4cell : bool
+            Include 4-cell vertices
+
+        Returns
+        -------
+        dict
+            Dictionary mapping cell tuples to junction pixel arrays
+        """
+        boundaries = {}
+
+        dilated_masks = {}
+        for label in labels:
+            dilated_masks[label] = binary_dilation(mask == label, structure=self.structuring_element)
+
+        if include_3cell:
+            for triplet in combinations(labels, 3):
+                intersection = np.logical_and(
+                    dilated_masks[triplet[0]], np.logical_and(dilated_masks[triplet[1]], dilated_masks[triplet[2]])
+                )
+                coords = self._boolean_to_coords(mask, intersection)
+                if len(coords) > 0:
+                    key = tuple(sorted([int(x) for x in triplet]))
+                    boundaries[key] = coords
+
+        if include_4cell:
+            for quad in combinations(labels, 4):
+                intersection = dilated_masks[quad[0]]
+                for label in quad[1:]:
+                    intersection = np.logical_and(intersection, dilated_masks[label])
+
+                coords = self._boolean_to_coords(mask, intersection)
+                if len(coords) > 0:
+                    key = tuple(sorted([int(x) for x in quad]))
+                    boundaries[key] = coords
+
+        return boundaries
+
+    def _boolean_to_coords(self, mask: np.ndarray, boolean_array: np.ndarray) -> np.ndarray:
+        """Convert boolean array to (x, y) coordinate array.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Original segmentation mask (used for shape validation)
+        boolean_array : np.ndarray
+            Boolean array where True indicates boundary pixels
+
+        Returns
+        -------
+        np.ndarray
+            Array of shape (N, 2) with (x, y) coordinates
+        """
+        rows, cols = np.where(boolean_array)
+        if len(rows) == 0:
+            return np.array([], dtype=np.int64).reshape(0, 2)
+
+        coords = np.column_stack([cols, rows])
+        return coords.astype(np.int64)
+
+    def visualize_boundaries(
+        self, mask: np.ndarray, boundaries: dict[tuple[int, ...], np.ndarray], figsize: tuple[int, int] = (15, 5)
+    ) -> Any:
+        """Visualize boundaries overlaid on segmentation mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            Segmentation mask
+        boundaries : dict
+            Boundary data from extract_boundaries()
         figsize : tuple
             Figure size
-        highlight_edges : list of tuples, optional
-            Edges to highlight in red
-            
+
         Returns
         -------
         plt.Figure
             The generated figure
         """
-        fig, (ax1, ax2, ax3) = plt.subplots(1, 3, figsize=figsize)
+        fig, axes = plt.subplots(1, 3, figsize=figsize)
 
-        # Show segmentation mask
-        unique_labels = np.unique(mask)
-        n_labels = len(unique_labels)
-        cmap = colors.ListedColormap(plt.cm.tab20(np.linspace(0, 1, n_labels)))
+        ax1 = axes[0]
+        ax1.imshow(mask, cmap="tab20", interpolation="nearest")
+        ax1.set_title("Segmentation Mask")
+        ax1.axis("off")
 
-        ax1.imshow(mask, cmap=cmap, interpolation='nearest')
-        ax1.set_title('Segmentation Mask')
-        ax1.axis('off')
+        ax2 = axes[1]
+        ax2.imshow(mask, cmap="tab20", interpolation="nearest", alpha=0.3)
 
-        # Show adjacency graph on mask
-        ax2.imshow(mask, cmap=cmap, interpolation='nearest', alpha=0.3)
+        for key, coords in boundaries.items():
+            if len(key) == 2:
+                ax2.scatter(coords[:, 0], coords[:, 1], s=2, alpha=0.7)
+        ax2.set_title("2-Cell Boundaries")
+        ax2.axis("off")
 
-        # Calculate node positions as centroids
-        pos = {}
-        for label in graph.nodes():
-            y, x = np.where(mask == label)
-            if len(x) > 0:
-                pos[label] = (np.mean(x), np.mean(y))
+        ax3 = axes[2]
+        ax3.imshow(mask, cmap="tab20", interpolation="nearest", alpha=0.3)
 
-        # Draw graph
-        nx.draw_networkx_nodes(graph, pos, ax=ax2, node_size=300, node_color='white',
-                              edgecolors='black', linewidths=2)
-
-        # Draw edges with weights
-        edges = graph.edges()
-        weights = [graph[u][v]['weight'] for u, v in edges]
-
-        if highlight_edges:
-            edge_colors = ['red' if (u, v) in highlight_edges or (v, u) in highlight_edges
-                          else 'black' for u, v in edges]
-        else:
-            edge_colors = 'black'
-
-        nx.draw_networkx_edges(graph, pos, ax=ax2, width=2, edge_color=edge_colors)
-        nx.draw_networkx_labels(graph, pos, ax=ax2, font_size=10, font_weight='bold')
-
-        # Add edge weights as labels
-        edge_labels = {(u, v): f"{graph[u][v]['weight']:.0f}" for u, v in edges}
-        nx.draw_networkx_edge_labels(graph, pos, edge_labels, ax=ax2, font_size=8)
-
-        ax2.set_title('Adjacency Graph')
-        ax2.axis('off')
-
-        # Show graph structure only
-        ax3.axis('off')
-        nx.draw(graph, pos, ax=ax3, with_labels=True, node_size=500,
-                node_color='lightblue', font_size=12, font_weight='bold',
-                edge_color='gray', width=[w/10 for w in weights])
-        ax3.set_title('Graph Structure')
+        for key, coords in boundaries.items():
+            if len(key) == 3:
+                ax3.scatter(coords[:, 0], coords[:, 1], s=20, marker="o", alpha=0.8)
+            elif len(key) == 4:
+                ax3.scatter(coords[:, 0], coords[:, 1], s=50, marker="*", alpha=0.8)
+        ax3.set_title("Junctions (3-cell: circles, 4-cell: stars)")
+        ax3.axis("off")
 
         plt.tight_layout()
         return fig
 
-    def process_timelapse(
-        self,
-        masks: list[np.ndarray]
-    ) -> list[nx.Graph]:
-        """
-        Process a series of segmentation masks to build graphs for each frame.
-        
+    def get_boundary_statistics(self, boundaries: dict) -> dict:
+        """Compute statistics for boundary data.
+
         Parameters
         ----------
-        masks : list of np.ndarray
-            List of segmentation masks for each timepoint
-            
+        boundaries : dict
+            Boundary data from extract_boundaries()
+
         Returns
         -------
-        list of nx.Graph
-            List of adjacency graphs for each timepoint
+        dict
+            Statistics summary including counts and lengths
         """
-        graphs = []
-        for mask in masks:
-            graph = self.build_graph(mask)
-            graphs.append(graph)
-        return graphs
+        stats = {
+            "n_2cell": 0,
+            "n_3cell": 0,
+            "n_4cell": 0,
+            "total_boundary_pixels": 0,
+            "edge_lengths": {},
+            "junction_sizes": {},
+        }
 
-    def track_t1_transitions(
+        for key, coords in boundaries.items():
+            n_pixels = len(coords)
+            stats["total_boundary_pixels"] += n_pixels
+
+            if len(key) == 2:
+                stats["n_2cell"] += 1
+                stats["edge_lengths"][key] = n_pixels
+            elif len(key) == 3:
+                stats["n_3cell"] += 1
+                stats["junction_sizes"][key] = n_pixels
+            elif len(key) == 4:
+                stats["n_4cell"] += 1
+                stats["junction_sizes"][key] = n_pixels
+
+        if stats["n_2cell"] > 0:
+            stats["avg_boundary_length"] = stats["total_boundary_pixels"] / stats["n_2cell"]
+        else:
+            stats["avg_boundary_length"] = 0
+
+        return stats
+
+    def create_boundary_mask(
         self,
-        graphs: list[nx.Graph],
-        four_cell_labels: list[int]
-    ) -> list[dict[str, float | bool]]:
-        """
-        Track T1 transitions across a timelapse for a specific four-cell cluster.
-        
+        mask: np.ndarray,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+    ) -> np.ndarray:
+        """Create an RGB mask with unique colors for each boundary tuple.
+
         Parameters
         ----------
-        graphs : list of nx.Graph
-            List of adjacency graphs for each timepoint
-        four_cell_labels : list of int
-            Labels of the four cells to track [a, b, c, d]
-            
+        mask : np.ndarray
+            2D segmentation mask with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+
         Returns
         -------
-        list of dict
-            T1 analysis results for each timepoint
+        np.ndarray
+            RGB image (H, W, 3) with unique colors for each boundary tuple
         """
-        results = []
-        for i, graph in enumerate(graphs):
-            try:
-                analysis = self.analyze_four_cell_cluster(graph, four_cell_labels)
-                analysis['timepoint'] = i
-                results.append(analysis)
-            except Exception as e:
-                print(f"Warning: Could not analyze timepoint {i}: {e}")
-                results.append({'timepoint': i, 'error': str(e)})
+        boundary_mask = np.zeros((*mask.shape, 3), dtype=np.uint8)
 
-        return results
+        if not boundaries:
+            return boundary_mask
+
+        n_boundaries = len(boundaries)
+        cmap = (
+            plt.cm.get_cmap("hsv", n_boundaries)
+            if n_boundaries <= 20
+            else plt.cm.get_cmap("tab20", min(20, n_boundaries))
+        )
+        cmap = plt.cm.get_cmap("tab20", 20)
+
+        for idx, (_key, coords) in enumerate(boundaries.items()):
+            if len(coords) == 0:
+                continue
+            color = np.array(cmap(idx)[:3]) * 255
+            for coord in coords:
+                x, y = coord[0], coord[1]
+                if 0 <= y < mask.shape[0] and 0 <= x < mask.shape[1]:
+                    boundary_mask[y, x] = color.astype(np.uint8)
+
+        return boundary_mask
+
+    def plot_boundaries_figure(
+        self,
+        mask: np.ndarray,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+        frame_idx: int = 0,
+    ) -> tuple[Figure, Axes]:
+        """Create a 2-panel figure with segmentation mask and boundary mask.
+
+        Parameters
+        ----------
+        mask : np.ndarray
+            2D segmentation mask with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+        frame_idx : int
+            Frame index for title
+
+        Returns
+        -------
+        tuple
+            (figure, axes) - matplotlib Figure and array of Axes
+        """
+        fig, axes = plt.subplots(1, 2, figsize=(12, 6))
+
+        ax1 = axes[0]
+        ax1.imshow(mask, cmap="tab20", interpolation="nearest")
+        ax1.set_title(f"Segmentation Mask (Frame {frame_idx})")
+        ax1.axis("off")
+
+        boundary_mask = self.create_boundary_mask(mask, boundaries)
+        ax2 = axes[1]
+        ax2.imshow(boundary_mask)
+        ax2.set_title(f"Boundaries ({len(boundaries)} tuples)")
+        ax2.axis("off")
+
+        plt.tight_layout()
+        return fig, axes
+
+    def plot_4panel_figure(
+        self,
+        cell_mask: np.ndarray,
+        nuclei_mask: np.ndarray | None,
+        boundaries: dict[tuple[int, ...], np.ndarray],
+        frame_idx: int = 0,
+    ) -> tuple[Figure, np.ndarray]:
+        """Create a 4-panel figure with cell masks, boundaries, nuclei mask, and Voronoi.
+
+        Parameters
+        ----------
+        cell_mask : np.ndarray
+            2D segmentation mask for cells with integer labels (0 = background)
+        nuclei_mask : np.ndarray
+            2D labeled mask for nuclei with integer labels (0 = background)
+        boundaries : dict
+            Boundary data from extract_boundaries()
+        frame_idx : int
+            Frame index for title
+
+        Returns
+        -------
+        tuple
+            (figure, axes) - matplotlib Figure and array of Axes (4 axes)
+        """
+        fig, axes = plt.subplots(2, 2, figsize=(12, 12))
+
+        ax1 = axes[0, 0]
+        ax1.imshow(cell_mask, cmap="tab20", interpolation="nearest")
+        ax1.set_title(f"Cell Segmentation (Frame {frame_idx})")
+        ax1.axis("off")
+
+        boundary_mask = self.create_boundary_mask(cell_mask, boundaries)
+        ax2 = axes[0, 1]
+        ax2.imshow(boundary_mask)
+        ax2.set_title(f"Boundaries ({len(boundaries)} tuples)")
+        ax2.axis("off")
+
+        ax3 = axes[1, 0]
+        if nuclei_mask is not None:
+            ax3.imshow(nuclei_mask, cmap="viridis", interpolation="nearest")
+            ax3.set_title("Nuclei Mask")
+        else:
+            ax3.text(0.5, 0.5, "No nuclei mask available", ha="center", va="center", transform=ax3.transAxes)
+            ax3.set_title("Nuclei Mask (N/A)")
+        ax3.axis("off")
+
+        ax4 = axes[1, 1]
+        if nuclei_mask is not None:
+            centroids = centroids_from_mask(nuclei_mask)
+            if len(centroids) > 0:
+                voronoi_labels = generate_voronoi_labels(cell_mask.shape, centroids, cell_mask)
+                ax4.imshow(voronoi_labels, cmap="viridis", interpolation="nearest")
+                ax4.set_title(f"Nuclei Voronoi ({len(centroids)} regions)")
+                for _, (cx, cy) in enumerate(centroids):
+                    ax4.plot(cx, cy, "ko", markersize=3)
+            else:
+                ax4.text(0.5, 0.5, "No nuclei detected", ha="center", va="center", transform=ax4.transAxes)
+                ax4.set_title("Nuclei Voronoi (N/A)")
+        else:
+            ax4.text(0.5, 0.5, "No nuclei mask available", ha="center", va="center", transform=ax4.transAxes)
+            ax4.set_title("Nuclei Voronoi (N/A)")
+        ax4.axis("off")
+
+        plt.tight_layout()
+        return fig, axes

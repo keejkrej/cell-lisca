@@ -1,10 +1,8 @@
 """
-Main entry point for cell-grapher module.
+Graph module entry point.
 
-This allows running: python -m cell_grapher
+This module is currently being redesigned.
 """
 
-from .main import main
-
 if __name__ == "__main__":
-    main()
+    print("Graph module is currently being redesigned. Use 'migrama graph' command when ready.")

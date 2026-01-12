@@ -7,7 +7,8 @@ This document contains development guidelines for contributors to the migrama re
 This is a monolithic Python package. Run commands from the repository root.
 
 ### General Commands
-- **Install**: `uv sync` or `pip install -e .`
+- **Install**: `uv sync` or `uv pip install -e .`
+- **Run CLI**: `uv run migrama <command> ...`
 - **Lint**: `ruff check --fix .`
 - **Type check**: No explicit typecheck command configured
 

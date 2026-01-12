@@ -1,6 +1,6 @@
-# Migrama: Live-cell Imaging of Self-organizing Cellular Arrays
+# Migrama: Cell Migration Automated Analysis
 
-A comprehensive toolkit for analyzing micropatterned timelapse microscopy images, focusing on cell tracking, pattern recognition, and topological transitions in cellular arrays.
+A comprehensive toolkit for automated analysis of cell migration in timelapse microscopy images, focusing on cell tracking, pattern recognition, and topological transitions in cellular arrays.
 
 ## Overview
 

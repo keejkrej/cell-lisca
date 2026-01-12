@@ -3,7 +3,6 @@
 import logging
 import sys
 from pathlib import Path
-from typing import cast
 
 import typer
 
@@ -13,21 +12,46 @@ app = typer.Typer(help="Migrama: A comprehensive toolkit for micropatterned time
 
 @app.command()
 def pattern(
-    patterns: str = typer.Option(..., "--patterns", "-p", help="Path to patterns ND2 file"),
+    patterns: str | None = typer.Option(
+        None, "--patterns", "-p", help="Path to patterns ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
+    ),
     output: str = typer.Option("./patterns.csv", "--output", "-o", help="Output CSV file path"),
+    avg: bool = typer.Option(False, "--avg", help="Interpret --patterns as per-FOV TIFF file path"),
     fov: int | None = typer.Option(None, "--fov", help="Process only this FOV (default: all FOVs)"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Detect micropatterns and save bounding boxes to CSV.
 
-    Output CSV format: cell,fov,x,y,w,h
+    Use -p/--patterns for dedicated pattern files, or with --avg for
+    pre-averaged TIFFs. Output CSV format: cell,fov,x,y,w,h
     """
+    if patterns is None:
+        typer.echo("Error: --patterns/-p is required", err=True)
+        raise typer.Exit(1)
+
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
+    if avg:
+        patterns_path = Path(patterns)
+        if not patterns_path.exists():
+            typer.echo(f"Error: Path does not exist: {patterns}", err=True)
+            raise typer.Exit(1)
+        if not patterns_path.is_dir():
+            typer.echo("Error: --avg requires a folder, not a file", err=True)
+            raise typer.Exit(1)
+
+        from ..core.pattern.source import TiffPatternFovSource
+
+        source = TiffPatternFovSource(patterns_path)
+    else:
+        from ..core.pattern.source import Nd2PatternFovSource
+
+        source = Nd2PatternFovSource(patterns)
+
     from ..core.pattern import PatternDetector
 
-    detector = PatternDetector(patterns_path=patterns)
+    detector = PatternDetector(source=source)
 
     if fov is not None:
         records = detector.detect_fov(fov)
@@ -41,13 +65,47 @@ def pattern(
 
 
 @app.command()
-def analyze(
+def average(
     cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
+    cell_channel: int = typer.Option(0, "--cc", help="Channel index for cell bodies (phase contrast)"),
+    t0: int | None = typer.Option(None, "--t0", help="Start frame index (inclusive, supports negative)"),
+    t1: int | None = typer.Option(None, "--t1", help="End frame index (exclusive, supports negative)"),
+    output_dir: str = typer.Option(".", "--output-dir", help="Output directory for averaged TIFFs"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Average time-lapse data to enhance pattern contrast.
+
+    Outputs one averaged TIFF per FOV (patterns_avg_fov_{fov}.tif) in the
+    specified output directory. Useful for detecting patterns from phase
+    contrast images without a dedicated pattern file.
+    """
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    from ..core.pattern import PatternAverager
+
+    averager = PatternAverager(
+        cells_path=cells,
+        cell_channel=cell_channel,
+        t0=t0,
+        t1=t1,
+        output_dir=output_dir,
+    )
+    output_paths = averager.run()
+    typer.echo(f"Averaged {len(output_paths)} FOVs to {output_dir}")
+
+
+@app.command()
+def analyze(
+    cells: str = typer.Option(
+        ..., "--cells", "-c", help="Path to cells ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
+    ),
     csv: str = typer.Option(..., "--csv", help="Path to patterns CSV file"),
     output: str = typer.Option("./analysis.csv", "--output", "-o", help="Output CSV file path"),
     nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
     n_cells: int = typer.Option(4, "--n-cells", help="Target number of cells per pattern"),
     min_size: int = typer.Option(15, "--min-size", help="Minimum object size for Cellpose"),
+    tiff: bool = typer.Option(False, "--tiff", help="Interpret --cells as per-FOV TIFF file path"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Analyze cell counts and output t0/t1 ranges."""
@@ -55,9 +113,15 @@ def analyze(
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
     from ..analyze import Analyzer
+    from ..core.cell_source import Nd2CellFovSource, TiffCellFovSource
+
+    if tiff:
+        source = TiffCellFovSource(cells)
+    else:
+        source = Nd2CellFovSource(cells)
 
     analyzer = Analyzer(
-        cells_path=cells,
+        source=source,
         csv_path=csv,
         nuclei_channel=nuclei_channel,
         n_cells=n_cells,
@@ -69,22 +133,31 @@ def analyze(
 
 @app.command()
 def extract(
-    cells: str = typer.Option(..., "--cells", "-c", help="Path to cells ND2 file"),
+    cells: str = typer.Option(
+        ..., "--cells", "-c", help="Path to cells ND2 file or per-FOV TIFF file (e.g., ./folder/xxx_0.tif)"
+    ),
     csv: str = typer.Option(..., "--csv", help="Path to analysis CSV file"),
     output: str = typer.Option("./extracted.h5", "--output", "-o", help="Output H5 file path"),
     nuclei_channel: int = typer.Option(1, "--nc", help="Channel index for nuclei"),
     cell_channel: int = typer.Option(0, "--cc", help="Channel index for cell bodies"),
     min_frames: int = typer.Option(1, "--min-frames", help="Minimum frames per sequence"),
+    tiff: bool = typer.Option(False, "--tiff", help="Interpret --cells as per-FOV TIFF file path"),
     debug: bool = typer.Option(False, "--debug"),
 ):
     """Extract sequences with segmentation and tracking."""
     log_level = logging.DEBUG if debug else logging.INFO
     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
 
+    from ..core.cell_source import Nd2CellFovSource, TiffCellFovSource
     from ..extract import Extractor
 
+    if tiff:
+        source = TiffCellFovSource(cells)
+    else:
+        source = Nd2CellFovSource(cells)
+
     extractor = Extractor(
-        cells_path=cells,
+        source=source,
         analysis_csv=csv,
         output_path=output,
         nuclei_channel=nuclei_channel,
@@ -151,72 +224,73 @@ def convert(
         raise
 
 
-@app.command()
-def graph(
-    input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with segmentation data"),
-    output: str = typer.Option(..., "--output", "-o", help="Output directory for analysis results"),
-    fov: int = typer.Option(..., "--fov", help="FOV index"),
-    pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
-    sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
-    start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame"),
-    end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive)"),
-    search_radius: float = typer.Option(100.0, "--search-radius", help="Max search radius for tracking"),
-    debug: bool = typer.Option(False, "--debug"),
-):
-    """Create region adjacency graphs and analyze T1 transitions."""
-    import os
-    import tempfile
-
-    import numpy as np
-    import yaml as yaml_module
-
-    log_level = logging.DEBUG if debug else logging.INFO
-    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
-
-    if not Path(input).exists():
-        typer.echo(f"Error: Input file does not exist: {input}", err=True)
-        raise typer.Exit(1)
-
-    from ..graph.h5_loader import H5SegmentationLoader
-    from ..graph.pipeline import analyze_cell_filter_data
-
-    loader = H5SegmentationLoader()
-
-    typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
-    loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
-    data = cast(np.ndarray, loaded_data["data"])
-    segmentation_masks = cast(np.ndarray, loaded_data["segmentation_masks"])
-
-    # Create temporary NPY file for pipeline compatibility
-    with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
-        combined_data = np.concatenate([data, segmentation_masks[:, np.newaxis, :, :]], axis=1)
-        np.save(tmp.name, combined_data)
-        tmp_npy_path = tmp.name
-
-    tmp_yaml_path = None
-    if loaded_data["metadata"]:
-        tmp_yaml_path = tmp_npy_path.replace(".npy", ".yaml")
-        with open(tmp_yaml_path, "w") as f:
-            yaml_module.dump(loaded_data["metadata"], f)
-
-    try:
-        results = analyze_cell_filter_data(
-            npy_path=tmp_npy_path,
-            yaml_path=tmp_yaml_path,
-            output_dir=output,
-            start_frame=start_frame,
-            end_frame=end_frame,
-            tracking_params={"search_radius": search_radius},
-        )
-
-        typer.echo(f"\nAnalysis complete: {results['total_frames']} frames, {results['t1_events_detected']} T1 events")
-        for file_type, path in results["output_files"].items():
-            typer.echo(f"  {file_type}: {path}")
-
-    finally:
-        os.unlink(tmp_npy_path)
-        if tmp_yaml_path and os.path.exists(tmp_yaml_path):
-            os.unlink(tmp_yaml_path)
+# Graph command disabled - being redesigned
+# @app.command()
+# def graph(
+#     input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with segmentation data"),
+#     output: str = typer.Option(..., "--output", "-o", help="Output directory for analysis results"),
+#     fov: int = typer.Option(..., "--fov", help="FOV index"),
+#     pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
+#     sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
+#     start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame"),
+#     end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive)"),
+#     search_radius: float = typer.Option(100.0, "--search-radius", help="Max search radius for tracking"),
+#     debug: bool = typer.Option(False, "--debug"),
+# ):
+#     """Create region adjacency graphs and analyze T1 transitions."""
+#     import os
+#     import tempfile
+#
+#     import numpy as np
+#     import yaml as yaml_module
+#
+#     log_level = logging.DEBUG if debug else logging.INFO
+#     logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+#
+#     if not Path(input).exists():
+#         typer.echo(f"Error: Input file does not exist: {input}", err=True)
+#         raise typer.Exit(1)
+#
+#     from ..graph.h5_loader import H5SegmentationLoader
+#     from ..graph.pipeline import analyze_cell_filter_data
+#
+#     loader = H5SegmentationLoader()
+#
+#     typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
+#     loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
+#     data = cast(np.ndarray, loaded_data["data"])
+#     segmentation_masks = cast(np.ndarray, loaded_data["segmentation_masks"])
+#
+#     # Create temporary NPY file for pipeline compatibility
+#     with tempfile.NamedTemporaryFile(suffix=".npy", delete=False) as tmp:
+#         combined_data = np.concatenate([data, segmentation_masks[:, np.newaxis, :, :]], axis=1)
+#         np.save(tmp.name, combined_data)
+#         tmp_npy_path = tmp.name
+#
+#     tmp_yaml_path = None
+#     if loaded_data["metadata"]:
+#         tmp_yaml_path = tmp_npy_path.replace(".npy", ".yaml")
+#         with open(tmp_yaml_path, "w") as f:
+#             yaml_module.dump(loaded_data["metadata"], f)
+#
+#     try:
+#         results = analyze_cell_filter_data(
+#             npy_path=tmp_npy_path,
+#             yaml_path=tmp_yaml_path,
+#             output_dir=output,
+#             start_frame=start_frame,
+#             end_frame=end_frame,
+#             tracking_params={"search_radius": search_radius},
+#         )
+#
+#         typer.echo(f"\nAnalysis complete: {results['total_frames']} frames, {results['t1_events_detected']} T1 events")
+#         for file_type, path in results["output_files"].items():
+#             typer.echo(f"  {file_type}: {path}")
+#
+#     finally:
+#         os.unlink(tmp_npy_path)
+#         if tmp_yaml_path and os.path.exists(tmp_yaml_path):
+#             os.unlink(tmp_yaml_path)
 
 
 @app.command()
@@ -264,7 +338,96 @@ def tension(
 
 
 @app.command()
-def info(
+def graph(
+    input: str = typer.Option(..., "--input", "-i", help="Path to H5 file with extracted data"),
+    output: str = typer.Option(..., "--output", "-o", help="Output directory for plots"),
+    fov: int = typer.Option(..., "--fov", help="FOV index"),
+    pattern: int = typer.Option(..., "--pattern", help="Pattern index"),
+    sequence: int = typer.Option(..., "--sequence", help="Sequence index"),
+    start_frame: int | None = typer.Option(None, "--start-frame", "-s", help="Starting frame (default: 0)"),
+    end_frame: int | None = typer.Option(None, "--end-frame", "-e", help="Ending frame (exclusive, default: all)"),
+    plot: bool = typer.Option(False, "--plot", help="Generate boundary visualization plots"),
+    debug: bool = typer.Option(False, "--debug"),
+):
+    """Visualize cell boundaries (doublets, triplets, quartets) from extracted H5 data."""
+    from pathlib import Path
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    log_level = logging.DEBUG if debug else logging.INFO
+    logging.basicConfig(level=log_level, format="%(levelname)s - %(name)s - %(message)s")
+
+    if not Path(input).exists():
+        typer.echo(f"Error: Input file does not exist: {input}", err=True)
+        raise typer.Exit(1)
+
+    from rich.progress import BarColumn, Progress, TaskID, TextColumn, TimeElapsedColumn
+
+    from ..graph.adjacency import BoundaryPixelTracker
+    from ..graph.h5_loader import H5SegmentationLoader
+
+    loader = H5SegmentationLoader()
+    tracker = BoundaryPixelTracker()
+
+    typer.echo(f"Loading sequence: FOV {fov}, Pattern {pattern}, Sequence {sequence}")
+    loaded_data = loader.load_cell_filter_data(input, fov, pattern, sequence, None)
+    segmentation_masks = np.asarray(loaded_data["segmentation_masks"])
+    nuclei_masks = np.asarray(loaded_data["nuclei_masks"]) if loaded_data["nuclei_masks"] is not None else None
+
+    if segmentation_masks.ndim != 3:
+        typer.echo(f"Error: Expected 3D segmentation masks, got shape {segmentation_masks.shape}", err=True)
+        raise typer.Exit(1)
+
+    n_frames = segmentation_masks.shape[0]
+    start = start_frame if start_frame is not None else 0
+    end = end_frame if end_frame is not None else n_frames
+
+    if start < 0 or end > n_frames or start >= end:
+        typer.echo(f"Error: Invalid frame range [{start}, {end}) for {n_frames} frames", err=True)
+        raise typer.Exit(1)
+
+    output_dir = Path(output)
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    typer.echo(f"Processing frames {start} to {end - 1} ({end - start} frames)")
+
+    progress = Progress(
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+        TimeElapsedColumn(),
+        transient=True,
+    )
+    progress.start()
+
+    n_total = end - start
+    plot_task: TaskID | None = None
+    if plot:
+        plot_task = progress.add_task("Generating plots", total=n_total)
+
+    try:
+        for frame_idx in range(start, end):
+            mask = segmentation_masks[frame_idx]
+            nuclei_mask_frame = nuclei_masks[frame_idx] if nuclei_masks is not None else None
+            boundaries = tracker.extract_boundaries(mask)
+
+            if plot and plot_task is not None:
+                fig, _ = tracker.plot_4panel_figure(mask, nuclei_mask_frame, boundaries, frame_idx)
+                out_path = output_dir / f"frame_{frame_idx:04d}.png"
+                fig.savefig(out_path, dpi=150, bbox_inches="tight")
+                plt.close(fig)
+                progress.update(plot_task, completed=frame_idx - start + 1)
+
+        progress.stop()
+        typer.echo(f"Done. Output saved to {output_dir}")
+    except Exception:
+        progress.stop()
+        raise
+
+
+@app.command()
+def info(  # noqa: C901
     input: str = typer.Option(..., "--input", "-i", help="Path to H5 file"),
     plot: str | None = typer.Option(None, "--plot", "-p", help="Plot a dataset slice: 'path,(dim0,dim1,...)'"),
     output: str | None = typer.Option(None, "--output", "-o", help="Save plot to PNG file"),
@@ -307,7 +470,7 @@ def info(
                 indices = [int(x.strip()) for x in slice_str.split(",") if x.strip() != ""]
             except ValueError:
                 typer.echo("Error: Slice indices must be integers", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             if path_part not in f:
                 typer.echo(f"Error: Dataset not found: {path_part}", err=True)
@@ -325,7 +488,7 @@ def info(
                 sliced = data[tuple(indices)]
             except IndexError as e:
                 typer.echo(f"Error: Invalid slice indices for dataset shape {data.shape}: {e}", err=True)
-                raise typer.Exit(1)
+                raise typer.Exit(1) from None
 
             if sliced.ndim != 2:
                 typer.echo(f"Error: Sliced result has {sliced.ndim} dimensions, expected 2", err=True)

@@ -1,8 +1,8 @@
 """
-Pattern detector - detects micropatterns from pattern ND2 files.
+Pattern detector - detects micropatterns from pattern images.
 
 This module is completely independent of cell data.
-Input: pattern.nd2
+Input: PatternFovSource (ND2, TIFF, etc.)
 Output: CSV with columns (cell, fov, x, y, w, h)
 """
 
@@ -14,7 +14,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from ..io.nikon import get_nd2_frame, load_nd2
+from .source import PatternFovSource
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +36,7 @@ class DetectorParameters:
 class PatternRecord:
     """A single pattern detection record."""
 
-    cell: int  # pattern index within FOV
+    cell: int
     fov: int
     x: int
     y: int
@@ -45,36 +45,26 @@ class PatternRecord:
 
 
 class PatternDetector:
-    """Detect micropatterns from pattern ND2 files.
+    """Detect micropatterns from pattern images using a PatternFovSource.
 
-    This class only works with pattern files and outputs bounding box
-    information as CSV. It has no dependency on cell/timelapse data.
+    This class works with any PatternFovSource implementation (ND2, TIFF, etc.)
+    and outputs bounding box information as CSV. It has no dependency on
+    cell/timelapse data.
     """
 
-    def __init__(self, patterns_path: str, parameters: DetectorParameters | None = None) -> None:
-        """Initialize detector with pattern file.
+    def __init__(self, source: PatternFovSource, parameters: DetectorParameters | None = None) -> None:
+        """Initialize detector with a pattern source.
 
         Parameters
         ----------
-        patterns_path : str
-            Path to the patterns ND2 file
+        source : PatternFovSource
+            Source of pattern images (ND2, TIFF, etc.)
         parameters : DetectorParameters | None
             Detection parameters (uses defaults if None)
         """
-        self.patterns_path = Path(patterns_path).resolve()
+        self.source = source
         self.parameters = parameters or DetectorParameters()
-
-        # Load pattern file
-        self.patterns_xarr, metadata = load_nd2(self.patterns_path)
-        self.n_fovs = metadata.n_fovs
-        self.n_channels = metadata.n_channels
-        self.n_frames = metadata.n_frames
-
-        # Validate pattern file format
-        if self.n_channels != 1:
-            raise ValueError(f"Pattern file should have 1 channel, got {self.n_channels}")
-        if self.n_frames != 1:
-            raise ValueError(f"Pattern file should have 1 frame, got {self.n_frames}")
+        self.n_fovs = source.n_fovs
 
         logger.info(f"Initialized PatternDetector with {self.n_fovs} FOVs")
 
@@ -122,7 +112,9 @@ class PatternDetector:
             min_area = self.parameters.min_area_ratio * mean_area
             max_area = self.parameters.max_area_ratio * mean_area
 
-            filtered = [(c, a) for c, a in zip(current_contours, current_areas, strict=False) if min_area <= a <= max_area]
+            filtered = [
+                (c, a) for c, a in zip(current_contours, current_areas, strict=False) if min_area <= a <= max_area
+            ]
             if not filtered:
                 break
             current_contours, current_areas = zip(*filtered, strict=False)
@@ -151,7 +143,6 @@ class PatternDetector:
             center_x = x + w // 2
             bboxes.append((x, y, w, h, center_y, center_x))
 
-        # Sort by Y then X for deterministic ordering
         bboxes.sort(key=lambda b: (b[4], b[5]))
         return [(x, y, w, h) for x, y, w, h, _, _ in bboxes]
 
@@ -171,17 +162,21 @@ class PatternDetector:
         if fov_idx < 0 or fov_idx >= self.n_fovs:
             raise ValueError(f"FOV index {fov_idx} out of range (0-{self.n_fovs - 1})")
 
-        # Load pattern image
-        pattern_img = get_nd2_frame(self.patterns_xarr, fov_idx, 0, 0)
+        pattern_img = None
+        for current_fov_idx, frame in self.source.iter_fovs():
+            if current_fov_idx == fov_idx:
+                pattern_img = frame
+                break
 
-        # Process
+        if pattern_img is None:
+            raise ValueError(f"FOV {fov_idx} not found in source")
+
         normalized = self._normalize_pct(pattern_img)
         contours, _ = self._find_contours(normalized)
         contours = self._filter_contours_by_area(contours)
         contours = self._filter_by_edge(contours, normalized.shape)
         bboxes = self._contours_to_bboxes(contours)
 
-        # Create records
         records = []
         for cell_idx, (x, y, w, h) in enumerate(bboxes):
             records.append(PatternRecord(cell=cell_idx, fov=fov_idx, x=x, y=y, w=w, h=h))

@@ -1,5 +1,6 @@
 """Migrama core: Shared utilities and interfaces for migrama modules."""
 
+from .cell_source import CellFovSource, Nd2CellFovSource, TiffCellFovSource
 from .network import CellGrapher
 from .pattern import (
     BoundingBox,
@@ -11,8 +12,13 @@ from .pattern import (
 )
 from .segmentation import CellposeCounter, CellposeSegmenter
 from .tracking import CellTracker
+from .voronoi import centroids_from_mask, generate_voronoi_labels
 
 __all__ = [
+    # Cell data sources
+    "CellFovSource",
+    "Nd2CellFovSource",
+    "TiffCellFovSource",
     # Pattern detection (pattern.nd2 -> CSV)
     "PatternDetector",
     "DetectorParameters",
@@ -28,4 +34,7 @@ __all__ = [
     "CellTracker",
     # Graph
     "CellGrapher",
+    # Voronoi
+    "centroids_from_mask",
+    "generate_voronoi_labels",
 ]

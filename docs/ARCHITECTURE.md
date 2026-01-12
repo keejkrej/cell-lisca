@@ -16,6 +16,7 @@ Shared utilities and interfaces used across all modules:
 - `segmentation/`: Cell segmentation utilities (Cellpose wrapper)
 - `tracking/`: Cell tracking utilities
 - `network/`: Graph operations for region adjacency analysis
+- `voronoi/`: Voronoi tessellation for nuclei-based analysis
 - `pattern/`: Pattern detection utilities
 
 ### Pipeline Stages
@@ -37,7 +38,7 @@ Stage 3: Sequence Extraction (migrama.extract)
 
 Stage 4: Graph Analysis (migrama.graph)
   Input: extracted.h5
-  Output: Region adjacency graphs, T1 transition analysis
+  Output: Region adjacency graphs, T1 transition analysis, boundary and Voronoi visualizations
 ```
 
 ### Feature Packages
