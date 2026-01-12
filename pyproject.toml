@@ -37,6 +37,7 @@ dependencies = [
     # Viewer dependencies
     "PySide6",
     "psygnal>=0.15.1",
+    "ipykernel>=7.1.0",
 ]
 
 [project.scripts]
