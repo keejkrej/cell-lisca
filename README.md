@@ -4,25 +4,26 @@ A comprehensive toolkit for automated analysis of cell migration in timelapse mi
 
 ## Overview
 
-Migrama is a monolithic Python package that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of seven integrated modules that work together to provide a complete analysis pipeline:
+Migrama is a monolithic Python package that provides specialized tools for processing and analyzing microscopy data of cells grown on micropatterns. The suite consists of eight integrated modules that work together to provide a complete analysis pipeline:
 
 1. **migrama.pattern**: Pattern detection and annotation for micropatterned microscopy images
 2. **migrama.analyze**: Cell counting and analysis with segmentation
 3. **migrama.extract**: Extract cropped sequences based on cell count criteria
-4. **migrama.graph**: Cell tracking, region adjacency graph construction, and T1 transition analysis
-5. **migrama.tension**: Integration with TensionMap for stress tensor inference
-6. **migrama.viewer**: Interactive visualization and frame selection for microscopy data
-7. **migrama.core**: Shared utilities and interfaces used across all modules
+4. **migrama.convert**: Convert raw TIFF folders into HDF5 for downstream analysis
+5. **migrama.graph**: Boundary and junction visualization from extracted segmentation masks
+6. **migrama.tension**: Integration with TensionMap for stress tensor inference
+7. **migrama.viewer**: Interactive visualization and frame selection for microscopy data
+8. **migrama.core**: Shared utilities and interfaces used across all modules
 
 ## Features
 
 - **Pattern Detection**: Automatically identify and annotate micropatterns in microscopy images (migrama.pattern)
 - **Cell Segmentation**: Advanced cell segmentation using Cellpose (migrama.filter)
-- **Cell Tracking**: Track cells across timeframes with IoU-based alignment (migrama.graph)
-- **Topological Analysis**: Analyze T1 transitions and cellular rearrangements (migrama.graph)
+- **Boundary Visualization**: Inspect cell-cell boundaries and junctions from extracted masks (migrama.graph)
 - **Tension Inference**: Calculate cellular stress tensors using VMSI (migrama.tension)
 - **Interactive Visualization**: User-friendly interface for data exploration (migrama.viewer)
 - **Data Export**: Multiple output formats for downstream analysis
+- **Data Conversion**: Convert TIFF stacks into analysis-ready HDF5 (migrama.convert)
 
 ## Installation
 
@@ -82,7 +83,8 @@ This will show all available subcommands:
 - `migrama pattern` - Pattern detection and annotation
 - `migrama analyze` - Cell counting and analysis  
 - `migrama extract` - Extract cropped sequences
-- `migrama graph` - Cell tracking and graph analysis
+- `migrama convert` - Convert TIFF folders to HDF5
+- `migrama graph` - Boundary and junction visualization
 - `migrama tension` - Tension map analysis
 - `migrama viewer` - Interactive viewer
 
@@ -108,7 +110,17 @@ make html
 
 ### Basic Workflow
 
-1. **Pattern Detection**: Detect patterns and save bounding boxes to CSV
+1. **Optional Conversion**: Convert TIFF folders to HDF5
+
+```bash
+migrama convert \
+  --input /path/to/tiff_folder \
+  --output ./converted.h5 \
+  --nuclei-channel 0 \
+  --cell-channel 1
+```
+
+2. **Pattern Detection**: Detect patterns and save bounding boxes to CSV
 
 ```bash
 migrama pattern \
@@ -118,7 +130,7 @@ migrama pattern \
 
 The output CSV has columns: `cell,fov,x,y,w,h`
 
-2. **Cell Analysis**: Analyze cell counts and identify valid frame ranges
+3. **Cell Analysis**: Analyze cell counts and identify valid frame ranges
 
 ```bash
 migrama analyze \
@@ -131,7 +143,7 @@ migrama analyze \
 
 The output CSV adds columns: `t0,t1` (valid frame range for each pattern).
 
-3. **Data Extraction**: Extract cropped timelapse sequences with tracking
+4. **Data Extraction**: Extract cropped timelapse sequences with tracking
 
 ```bash
 migrama extract \
@@ -142,7 +154,7 @@ migrama extract \
   --min-frames 20
 ```
 
-4. **Cell Tracking & Analysis**: Build region adjacency graphs and analyze T1 transitions
+5. **Boundary & Junction Visualization**: Inspect doublets, triplets, and quartets
 
 ```bash
 migrama graph \
@@ -150,10 +162,11 @@ migrama graph \
   --output ./analysis \
   --fov 0 \
   --pattern 0 \
-  --sequence 0
+  --sequence 0 \
+  --plot
 ```
 
-5. **Visualization**: Interactively view and select frames
+6. **Visualization**: Interactively view and select frames
 
 ```bash
 migrama viewer
@@ -191,7 +204,7 @@ migrama/
 │       ├── extract/     # Data extraction module
 │       │   ├── __init__.py
 │       │   └── core.py  # Extraction logic
-│       ├── graph/       # Cell tracking and graph analysis
+│       ├── graph/       # Boundary and junction visualization
 │       │   ├── __init__.py
 │       │   ├── main.py  # Graph CLI
 │       │   └── ...      # Graph analysis modules
